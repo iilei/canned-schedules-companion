@@ -1,0 +1,46 @@
+[tools]
+# Keep the linter before Go so an older copy in Go's bin directory cannot shadow it.
+golangci-lint = "2.15.0"
+go = "1.27.3"
+# Markdown style (.rumdl.toml): README and CLAUDE.md.
+rumdl = "0.3.0"
+
+[tasks.fmt]
+description = "Format Go code using the configured golangci-lint formatters"
+run = "golangci-lint fmt"
+
+[tasks."fmt:check"]
+description = "Check Go formatting without changing files"
+run = "golangci-lint fmt --diff"
+
+[tasks.vet]
+description = "Run Go vet on all packages"
+run = "go vet ./..."
+
+[tasks.lint]
+description = "Run golangci-lint with .golangci.yml"
+run = "golangci-lint run"
+
+[tasks.test]
+description = "Run all tests with the race detector"
+run = "go test -race ./..."
+
+[tasks."lint:md"]
+description = "Check Markdown style with rumdl (.rumdl.toml); mise run fmt:md fixes what it can"
+run = "rumdl check ."
+
+[tasks."fmt:md"]
+description = "Fix Markdown style issues rumdl can fix"
+run = "rumdl fmt ."
+
+[tasks.build]
+description = "Compile all packages, including the binary"
+run = "go build ./..."
+
+[tasks.tidy]
+description = "Tidy Go module dependencies"
+run = "go mod tidy"
+
+[tasks.check]
+description = "Run all non-mutating quality checks"
+depends = ["fmt:check", "vet", "lint", "lint:md", "test", "build"]

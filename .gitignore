@@ -1,0 +1,8 @@
+*coverage.txt
+coverage
+/canned-schedules-companion
+/dist
+# Written by preview render when run here.
+/canned-schedule-preview
+# rumdl's cache (mise run lint:md).
+/.rumdl_cache

@@ -1,0 +1,12 @@
+[global]
+# Test inputs are schedule requests (one is invalid on purpose); LICENSE.md is the fsl.software template, verbatim.
+exclude = ["testdata/*.md", "LICENSE.md"]
+extend-enable = ["MD060", "MD001", "MD003", "MD022", "MD025", "MD032"]
+
+[MD013]
+line-length = 227
+
+[MD060]
+enabled = true
+style = "aligned"
+column-align = "auto"
