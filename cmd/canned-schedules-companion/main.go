@@ -4,12 +4,13 @@
 // Usage:
 //
 //	canned-schedules-companion preview render [flags] request.md
+//	canned-schedules-companion preview post --forge github --repo OWNER/REPO --issue N [flags] dir
 //
 // Every step splits into local verbs (render, prepare, check), which read and write files only, and forge verbs
 // (post, open, publish, retire), which write to GitHub or GitLab, support --dry-run and take the forge explicitly.
 //
-// Exit codes: 0 when the request is valid, 1 when it has errors, 2 when the command line or the environment is
-// unusable.
+// Exit codes: 0 when the request is valid (render) or the comment is posted (post), 1 when the request has errors,
+// 2 when the command line, the environment or the forge is unusable.
 package main
 
 import (
@@ -45,6 +46,7 @@ const (
 )
 
 const usage = `usage: canned-schedules-companion preview render [flags] request.md
+       canned-schedules-companion preview post --forge github --repo OWNER/REPO --issue N [flags] dir
        canned-schedules-companion --version
 `
 
@@ -72,6 +74,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return exitOK
 	case len(args) >= 2 && args[0] == "preview" && args[1] == "render":
 		return previewRender(args[2:], stdout, stderr)
+	case len(args) >= 2 && args[0] == "preview" && args[1] == "post":
+		return previewPost(args[2:], stdout, stderr)
 	}
 
 	fmt.Fprint(stderr, usage)
