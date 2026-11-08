@@ -38,6 +38,17 @@ talks to a forge lives here.
   text) and `--note`; over GitHub's 65,536 characters it falls back to the marker, a short notice and the links.
   Exit 2 for API failures, like any unusable environment. Tested against a fake API (`httptest`); a dry run against
   the real one read core issue #38.
+- **Playground link, opt-in only (decided 2026-11-08):** previews are CI's job, so nobody has to wonder where a
+  request's data lands; the public Pages site is never linked by default. A team that hosts the preflight page
+  itself opts in with `preview render --fiddle-link-base-uri <https URI>`: `comment.md` then ends with
+  "Try this schedule in the playground and see its week", linking to the base plus `#doc=` and the base64url
+  document. The label names the playground
+  (the full preflight page with its editor), not a timetable view, which doesn't exist. Valid requests travel in
+  canonical form (no prose), invalid ones as written, so the playground marks their errors; one label for both. The
+  base must be `https` with a host, no user info and no `#` (the fragment is the document); a query stays. A link
+  over `MaxFiddleLink` (32 KiB) gives way to a notice. Base64url without padding, as the page writes and reads it
+  (checked with the page's own `fromHash` logic). Without the flag, `comment.md` stays byte-identical to the core
+  example's `schedule:check`.
 - **On GitHub, a binary can't upload workflow artifacts:** the action runs `preview render`, then
   `actions/upload-artifact`, then `preview post` with the links.
 - **Licence: FSL-1.1-ALv2**, like the core; the binary includes the core anyway.
@@ -57,6 +68,6 @@ talks to a forge lives here.
 ## Layout
 
 - `cmd/canned-schedules-companion`: the binary, flag parsing, input reading, atomic writes, exit codes.
-- `internal/preview`: step 1's local part (`Render`, `Body`, `ParseLink`), pure.
+- `internal/preview`: step 1's local part (`Render`, `Body`, `ParseLink`, `ParseFiddleBase`, `FiddleLink`), pure.
 - `internal/forge/github`: the only code that talks to GitHub.
 - `testdata/`: request inputs (`office-hours.md` is the core's GitLab issue template).

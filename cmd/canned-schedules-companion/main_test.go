@@ -64,6 +64,25 @@ func TestEvaluationFlags(t *testing.T) {
 	}
 }
 
+func TestFiddleLinkFlag(t *testing.T) {
+	t.Parallel()
+
+	out := t.TempDir()
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{
+		"preview", "render", "--out-dir", out, "--fiddle-link-base-uri", "https://schedules.example.com/",
+		"../../testdata/office-hours.md",
+	}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("exit %d: %s", code, stderr.String())
+	}
+
+	if c, _ := os.ReadFile(filepath.Join(out, "comment.md")); !strings.Contains(string(c),
+		"](https://schedules.example.com/#doc=") {
+		t.Errorf("comment.md must link to the playground:\n%s", c)
+	}
+}
+
 func TestUsage(t *testing.T) {
 	t.Parallel()
 
@@ -76,6 +95,8 @@ func TestUsage(t *testing.T) {
 		{"preview", "render", "--require-base", "yes", "../../testdata/office-hours.md"},
 		{"preview", "render", "--set-config-at", "states", "../../testdata/office-hours.md"},
 		{"preview", "render", "missing.md"},
+		{"preview", "render", "--fiddle-link-base-uri", "http://insecure.example.com/", "../../testdata/office-hours.md"},
+		{"preview", "render", "--fiddle-link-base-uri", "https://example.com/#x", "../../testdata/office-hours.md"},
 		{"preview", "render", "../../testdata"},
 	} {
 		var stdout, stderr bytes.Buffer

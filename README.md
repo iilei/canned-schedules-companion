@@ -46,6 +46,22 @@ Files of an earlier run in the same directory are removed first, so a request th
 preview. The comment starts with `<!-- canned-schedules:issue-preview -->`, by which a forge step finds and updates
 its earlier comment.
 
+### Playground link (opt-in)
+
+By default, everything stays in CI and on the forge: the comment carries the report and the text form, and the
+files go where your workflow puts them. Teams that host the canned-schedules preflight page themselves (built with
+the core repo's `mise run web:build`, served from their own GitHub Pages or intranet) can opt in:
+
+```sh
+canned-schedules-companion preview render --fiddle-link-base-uri https://schedules.example.com/preflight/ request.md
+```
+
+The comment then ends with "Try this schedule in the playground and see its week", a link to that page with the
+schedule in the URL fragment (`#doc=`, base64url): the canonical form of a valid request, the request as written
+otherwise, so the playground shows the errors at their lines. Browsers never send the fragment to the server, so
+the schedule stays in the reader's browser even on your own host. The base must be `https` without a fragment; a
+query is kept (e.g. `?theme=dark`). A link longer than 32 KiB is left out with a notice.
+
 Flags with the canned-schedules CLI's names and meaning: `--sample-interval`, `--require-base true|false`, `--base`,
 `--error-unless-alert-pattern`, `--set-config-at` / `--set-config-value` (repeatable pairs) and
 `--preview-downsample N`.

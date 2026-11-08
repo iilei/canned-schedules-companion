@@ -19,7 +19,7 @@ func render(t *testing.T, path string) *preview.Result {
 		t.Fatal(err)
 	}
 
-	res, err := preview.Render(src, "request.md", &cs.Options{Preview: &cs.PreviewOptions{}})
+	res, err := preview.Render(src, "request.md", &cs.Options{Preview: &cs.PreviewOptions{}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
