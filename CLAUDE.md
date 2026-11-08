@@ -29,6 +29,26 @@ talks to a forge lives here.
 - **Evaluation flags keep the core CLI's names and meaning** (`--require-base true|false` takes a value), so a
   `canned-schedules.args` line works here too.
 - **Exit codes:** 0 valid, 1 request errors (files still written), 2 usage or environment.
+- **`preview post --forge github` (implemented 2026-11-08):** `internal/forge/github` with plain `net/http` (no
+  dependency): lists the issue's comments (100 per page), takes those starting with the marker and written by
+  `--author` (default `github-actions[bot]`), updates the oldest, deletes the others, or creates one. Everything is
+  a flag (`--repo`, `--issue`, `--api-url`, `--author`); only the token comes from the environment, from the
+  variable `--token-env` names (default `GITHUB_TOKEN`). `--dry-run` reads but never writes. The body comes from
+  `preview.Body`: `comment.md` plus a line of `--link label=https://…` (parentheses percent-encoded, labels plain
+  text) and `--note`; over GitHub's 65,536 characters it falls back to the marker, a short notice and the links.
+  Exit 2 for API failures, like any unusable environment. Tested against a fake API (`httptest`); a dry run against
+  the real one read core issue #38.
+- **Playground link, opt-in only (decided 2026-11-08):** previews are CI's job, so nobody has to wonder where a
+  request's data lands; the public Pages site is never linked by default. A team that hosts the preflight page
+  itself opts in with `preview render --fiddle-link-base-uri <https URI>`: `comment.md` then ends with
+  "Try this schedule in the playground and see its week", linking to the base plus `#doc=` and the base64url
+  document. The label names the playground
+  (the full preflight page with its editor), not a timetable view, which doesn't exist. Valid requests travel in
+  canonical form (no prose), invalid ones as written, so the playground marks their errors; one label for both. The
+  base must be `https` with a host, no user info and no `#` (the fragment is the document); a query stays. A link
+  over `MaxFiddleLink` (32 KiB) gives way to a notice. Base64url without padding, as the page writes and reads it
+  (checked with the page's own `fromHash` logic). Without the flag, `comment.md` stays byte-identical to the core
+  example's `schedule:check`.
 - **On GitHub, a binary can't upload workflow artifacts:** the action runs `preview render`, then
   `actions/upload-artifact`, then `preview post` with the links.
 - **Licence: FSL-1.1-ALv2**, like the core; the binary includes the core anyway.
@@ -38,8 +58,8 @@ talks to a forge lives here.
 
 ## Open
 
-1. `preview post --forge github` (find the marked bot comment, update the oldest, delete the rest, or create), and
-   the composite action at the repo root.
+1. The composite action at the repo root (`preview render` → `actions/upload-artifact` → `preview post` with the
+   `artifact-url`s); it needs the release pipeline (item 2) or a build from the action's checkout.
 2. The release pipeline (goreleaser, signing, attestations, smoke tests) like the core's; needs the GPG secrets in a
    `release` environment.
 3. The core's `examples/consumer` switches to this binary.
@@ -48,5 +68,6 @@ talks to a forge lives here.
 ## Layout
 
 - `cmd/canned-schedules-companion`: the binary, flag parsing, input reading, atomic writes, exit codes.
-- `internal/preview`: step 1's local part (`Render`), pure.
+- `internal/preview`: step 1's local part (`Render`, `Body`, `ParseLink`, `ParseFiddleBase`, `FiddleLink`), pure.
+- `internal/forge/github`: the only code that talks to GitHub.
 - `testdata/`: request inputs (`office-hours.md` is the core's GitLab issue template).

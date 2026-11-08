@@ -4,12 +4,13 @@
 // Usage:
 //
 //	canned-schedules-companion preview render [flags] request.md
+//	canned-schedules-companion preview post --forge github --repo OWNER/REPO --issue N [flags] dir
 //
 // Every step splits into local verbs (render, prepare, check), which read and write files only, and forge verbs
 // (post, open, publish, retire), which write to GitHub or GitLab, support --dry-run and take the forge explicitly.
 //
-// Exit codes: 0 when the request is valid, 1 when it has errors, 2 when the command line or the environment is
-// unusable.
+// Exit codes: 0 when the request is valid (render) or the comment is posted (post), 1 when the request has errors,
+// 2 when the command line, the environment or the forge is unusable.
 package main
 
 import (
@@ -17,6 +18,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -45,6 +47,7 @@ const (
 )
 
 const usage = `usage: canned-schedules-companion preview render [flags] request.md
+       canned-schedules-companion preview post --forge github --repo OWNER/REPO --issue N [flags] dir
        canned-schedules-companion --version
 `
 
@@ -72,6 +75,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return exitOK
 	case len(args) >= 2 && args[0] == "preview" && args[1] == "render":
 		return previewRender(args[2:], stdout, stderr)
+	case len(args) >= 2 && args[0] == "preview" && args[1] == "post":
+		return previewPost(args[2:], stdout, stderr)
 	}
 
 	fmt.Fprint(stderr, usage)
@@ -88,7 +93,7 @@ func (o *overrides) Set(s string) error {
 }
 
 func previewRender(args []string, stdout, stderr io.Writer) int {
-	opts, outDir, file, err := parseRender(args, stderr)
+	opts, outDir, file, fiddle, err := parseRender(args, stderr)
 	if err != nil {
 		if !errors.Is(err, errUsage) {
 			fmt.Fprintln(stderr, "canned-schedules-companion:", err)
@@ -104,7 +109,7 @@ func previewRender(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 
-	res, err := preview.Render(src, file, opts)
+	res, err := preview.Render(src, file, opts, fiddle)
 	if err != nil {
 		fmt.Fprintln(stderr, "canned-schedules-companion:", err)
 
@@ -127,7 +132,7 @@ func previewRender(args []string, stdout, stderr io.Writer) int {
 }
 
 // parseRender reads the flags of preview render. The evaluation flags have the core CLI's names and meaning.
-func parseRender(args []string, stderr io.Writer) (*cs.Options, string, string, error) {
+func parseRender(args []string, stderr io.Writer) (*cs.Options, string, string, *url.URL, error) {
 	fs := flag.NewFlagSet("preview render", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
@@ -156,14 +161,25 @@ func parseRender(args []string, stderr io.Writer) (*cs.Options, string, string, 
 	fs.Var(&at, "set-config-at", "config path to replace (repeatable, paired with --set-config-value)")
 	fs.Var(&values, "set-config-value", "JSON value for the matching --set-config-at (repeatable)")
 	fs.IntVar(&downsample, "preview-downsample", cs.DefaultDownsample, "preview buckets in minutes; must divide 60")
+	fiddleRaw := fs.String("fiddle-link-base-uri", "", "opt-in: a preflight page you host; the comment links to it "+
+		"with the schedule in the URL fragment")
 
 	if err := fs.Parse(args); err != nil {
-		return nil, "", "", errUsage
+		return nil, "", "", nil, errUsage
 	}
 
 	if len(at) != len(values) {
-		return nil, "", "", fmt.Errorf("%d --set-config-at but %d --set-config-value: they must come in pairs",
+		return nil, "", "", nil, fmt.Errorf("%d --set-config-at but %d --set-config-value: they must come in pairs",
 			len(at), len(values))
+	}
+
+	var fiddle *url.URL
+
+	if *fiddleRaw != "" {
+		var err error
+		if fiddle, err = preview.ParseFiddleBase(*fiddleRaw); err != nil {
+			return nil, "", "", nil, err
+		}
 	}
 
 	for i := range at {
@@ -175,10 +191,10 @@ func parseRender(args []string, stderr io.Writer) (*cs.Options, string, string, 
 	if fs.NArg() != 1 {
 		fmt.Fprint(stderr, usage)
 
-		return nil, "", "", errUsage
+		return nil, "", "", nil, errUsage
 	}
 
-	return &opts, *outDir, fs.Arg(0), nil
+	return &opts, *outDir, fs.Arg(0), fiddle, nil
 }
 
 // readInput opens file once, checks the opened file and reads at most maxInputBytes.

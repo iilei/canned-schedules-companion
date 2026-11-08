@@ -4,7 +4,7 @@ The lifecycle around [canned-schedules](https://github.com/iilei/canned-schedule
 issue written from the template) into feedback on that issue, and later moves approved requests to the catalog
 ("shelf"), publishes them and keeps them tidy.
 
-**Work in progress.** Step 1, issue feedback, has its local part: `preview render`.
+**Work in progress.** Step 1, issue feedback: `preview render` (local) and `preview post --forge github`.
 
 ## Design
 
@@ -19,8 +19,8 @@ issue written from the template) into feedback on that issue, and later moves ap
   | promotion     | `promote prepare`  | `promote open`       |
   | housekeeping  | `housekeep check`  | `housekeep retire`   |
 
-  Only `preview render` exists so far. Forge verbs will support `--dry-run` and take the forge explicitly
-  (`--forge github|gitlab`).
+  `preview render` and `preview post` exist so far. Forge verbs support `--dry-run` and take the forge explicitly
+  (`--forge github`; `gitlab` comes later).
 - **Built on the canned-schedules Go library** (`github.com/iilei/canned-schedules`), pinned in `go.mod`. Its
   results are the CLI's results, byte for byte.
 
@@ -46,11 +46,55 @@ Files of an earlier run in the same directory are removed first, so a request th
 preview. The comment starts with `<!-- canned-schedules:issue-preview -->`, by which a forge step finds and updates
 its earlier comment.
 
+### Playground link (opt-in)
+
+By default, everything stays in CI and on the forge: the comment carries the report and the text form, and the
+files go where your workflow puts them. Teams that host the canned-schedules preflight page themselves (built with
+the core repo's `mise run web:build`, served from their own GitHub Pages or intranet) can opt in:
+
+```sh
+canned-schedules-companion preview render --fiddle-link-base-uri https://schedules.example.com/preflight/ request.md
+```
+
+The comment then ends with "Try this schedule in the playground and see its week", a link to that page with the
+schedule in the URL fragment (`#doc=`, base64url): the canonical form of a valid request, the request as written
+otherwise, so the playground shows the errors at their lines. Browsers never send the fragment to the server, so
+the schedule stays in the reader's browser even on your own host. The base must be `https` without a fragment; a
+query is kept (e.g. `?theme=dark`). A link longer than 32 KiB is left out with a notice.
+
 Flags with the canned-schedules CLI's names and meaning: `--sample-interval`, `--require-base true|false`, `--base`,
 `--error-unless-alert-pattern`, `--set-config-at` / `--set-config-value` (repeatable pairs) and
 `--preview-downsample N`.
 
 Exit codes: 0 valid, 1 the request has errors (the files are still written), 2 unusable command line or input.
+
+## preview post
+
+```sh
+canned-schedules-companion preview post --forge github --repo OWNER/REPO --issue N [flags] dir
+```
+
+Posts `dir/comment.md` (written by `preview render`) to the issue, keeping **one comment per issue**: it lists the
+issue's comments, takes those that start with the marker **and** were written by `--author` (default
+`github-actions[bot]`, the workflow token's account), updates the oldest and deletes the others; with none, it
+creates the comment. A marker someone pasted into their own comment is never touched.
+
+| Flag               | Meaning                                                                         |
+| ------------------ | ------------------------------------------------------------------------------- |
+| `--link label=URL` | a link under the comment, e.g. to an uploaded artifact (repeatable, https only) |
+| `--note text`      | text in parentheses after the links                                             |
+| `--author login`   | whose comments count as the step's own (locally: your login)                    |
+| `--token-env NAME` | the variable holding the token (default `GITHUB_TOKEN`)                         |
+| `--api-url URL`    | the REST API, for GitHub Enterprise Server (default `https://api.github.com`)   |
+| `--dry-run`        | read the comments and say what would change, but write nothing                  |
+
+A comment longer than GitHub's 65,536 characters becomes a short notice plus the links. The token needs only the
+`issues: write` permission. Locally:
+
+```sh
+GITHUB_TOKEN=$(gh auth token) canned-schedules-companion preview post --forge github \
+  --repo you/catalog --issue 12 --author you --dry-run canned-schedule-preview
+```
 
 ## Development
 

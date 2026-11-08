@@ -4,6 +4,7 @@ package preview
 
 import (
 	"bytes"
+	"net/url"
 	"strings"
 
 	cs "github.com/iilei/canned-schedules"
@@ -36,9 +37,11 @@ type Result struct {
 	Valid bool
 }
 
-// Render evaluates src (named file in the reports) with opts, which must plan a preview (opts.Preview). The error
-// is only for unusable options or a rendering bug; document problems are in the reports and the comment.
-func Render(src []byte, file string, opts *cs.Options) (*Result, error) {
+// Render evaluates src (named file in the reports) with opts, which must plan a preview (opts.Preview). With a
+// fiddle base (opt-in: a preflight page the team hosts), the comment links to it with the document: the canonical
+// form of a valid request, the request as written otherwise, so the playground shows its errors at their lines. The
+// error is only for unusable options or a rendering bug; document problems are in the reports and the comment.
+func Render(src []byte, file string, opts *cs.Options, fiddle *url.URL) (*Result, error) {
 	r, err := cs.Evaluate(src, opts)
 	if err != nil {
 		return nil, err
@@ -70,6 +73,18 @@ func Render(src []byte, file string, opts *cs.Options) (*Result, error) {
 	}
 
 	res.Files[Comment] = comment(res.Files[ReportMarkdown], res.Files[ScheduleText])
+
+	if fiddle != nil {
+		doc := src
+
+		if r.Valid() {
+			if doc, err = r.Canonical(); err != nil {
+				return nil, err
+			}
+		}
+
+		res.Files[Comment] = append(res.Files[Comment], fiddleLine(fiddle, doc)...)
+	}
 
 	return res, nil
 }
