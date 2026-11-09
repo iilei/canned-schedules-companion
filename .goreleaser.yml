@@ -1,0 +1,206 @@
+version: 2
+
+# Release builds go to dist/release, as in the core.
+dist: dist/release
+
+# CORE_VERSION (the pinned canned-schedules module, named in the release notes) comes from the release workflow and
+# mise run release:snapshot.
+before:
+  hooks:
+    - go test ./...
+    # The licences of everything compiled or embedded into the binary, shipped in every archive.
+    - mise run licenses
+
+builds:
+  - id: companion-linux
+    main: ./cmd/canned-schedules-companion
+    binary: canned-schedules-companion
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - "7"  # ARMv7
+    # Reproducible: no local paths in the binary, file times from the commit.
+    flags:
+      - -trimpath
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+
+  - id: companion-darwin
+    main: ./cmd/canned-schedules-companion
+    binary: canned-schedules-companion
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    # Reproducible: no local paths in the binary, file times from the commit.
+    flags:
+      - -trimpath
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+
+  - id: companion-windows
+    main: ./cmd/canned-schedules-companion
+    binary: canned-schedules-companion
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    # Reproducible: no local paths in the binary, file times from the commit.
+    flags:
+      - -trimpath
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+
+archives:
+  - id: unix-archives
+    ids:
+      - companion-linux
+      - companion-darwin
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_
+      {{- if and (eq .Os "darwin") (eq .Arch "all") -}}
+      universal2
+      {{- else if eq .Arch "amd64" -}}
+      x86_64
+      {{- else if eq .Arch "386" -}}
+      i386
+      {{- else -}}
+      {{ .Arch }}
+      {{- end -}}
+      {{- if eq .Arch "arm" }}v{{ .Arm }}{{ end }}
+    formats:
+      - tar.gz
+    files:
+      - README.md
+      - LICENSE.md
+      - THIRD_PARTY_LICENSES.md
+
+  - id: windows-archives
+    ids:
+      - companion-windows
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - zip
+    files:
+      - README.md
+      - LICENSE.md
+      - THIRD_PARTY_LICENSES.md
+
+universal_binaries:
+  - id: companion-darwin
+    ids:
+      - companion-darwin
+    replace: true
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore(\(.+\))?:'
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: 'Bug fixes'
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Others
+      order: 999
+
+# An SPDX SBOM per archive (<archive>.sbom.json, made by syft, pinned in mise.toml). checksums.txt lists the SBOMs,
+# so its signature and the build provenance attestation cover them too.
+sboms:
+  - artifacts: archive
+
+# Every archive and checksums.txt get a detached GPG signature (<file>.sig). The key comes from the release workflow
+# (GPG_FINGERPRINT); mise run release:snapshot skips signing.
+signs:
+  - id: archives
+    cmd: gpg
+    args: ["--batch", "--local-user", "{{ .Env.GPG_FINGERPRINT }}", "--output", "${signature}", "--detach-sign",
+           "${artifact}"]
+    artifacts: archive
+    output: true
+  - id: checksums
+    cmd: gpg
+    args: ["--batch", "--local-user", "{{ .Env.GPG_FINGERPRINT }}", "--output", "${signature}", "--detach-sign",
+           "${artifact}"]
+    artifacts: checksum
+    output: true
+
+# Created as a draft: the release workflow publishes it only after every native binary passed its smoke test.
+release:
+  prerelease: auto
+  draft: true
+  replace_existing_draft: true
+  mode: replace
+  # The public release key, so a downloaded release carries what its signatures are checked against.
+  extra_files:
+    - glob: ./release-key.asc
+  header: |
+    ## canned-schedules-companion {{ .Tag }} ({{ .Date }})
+
+    The lifecycle steps around canned schedules (issue feedback first), built on canned-schedules
+    {{ envOrDefault "CORE_VERSION" "(unknown)" }}.
+  footer: |
+    **Full Changelog**: https://github.com/iilei/canned-schedules-companion/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+    ## Installation
+
+    ### Binary Download
+    Download the archive for your platform from the assets below. Each archive has a detached GPG signature
+    (`.sig`), a SHA-256 sidecar (`.sha256`) and an SPDX SBOM (`.sbom.json`); `checksums.txt` lists them and is signed
+    too, with the release key of canned-schedules, which signs both projects:
+    `B645 234C 9CB8 175E CA5D  78A5 C844 7A22 52E9 E7B6` (`release-key.asc`, also on keys.openpgp.org and
+    keyserver.ubuntu.com):
+
+    ```bash
+    gpg --import release-key.asc
+    gpg --verify checksums.txt.sig checksums.txt
+    sha256sum --check --ignore-missing checksums.txt
+    ```
+
+    Every file in `checksums.txt` also has a GitHub build provenance attestation:
+
+    ```bash
+    gh attestation verify <archive> --repo iilei/canned-schedules-companion
+    ```
+
+    ### Using mise
+    ```bash
+    mise use github:iilei/canned-schedules-companion@{{ .Version }}
+    ```
+    mise checks the download against GitHub's digest and its provenance attestation.
+
+    ### Using Go
+    ```bash
+    go install github.com/iilei/canned-schedules-companion/cmd/canned-schedules-companion@{{ .Tag }}
+    ```
