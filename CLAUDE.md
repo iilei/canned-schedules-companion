@@ -69,7 +69,10 @@ talks to a forge lives here.
   in the binary and the Go standard library: no fonts, since the core's library never links the Sphinx kit (core
   #61). `release:smoke` runs `--version` and `preview render` on `testdata/office-hours.md` and requires all six
   files. Release by pushing a signed tag (`git tag -s vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`), never on the
-  Releases page; the build job refuses a tag whose release is already published.
+  Releases page; the build job refuses a tag whose release is already published. **`v0.1.0`, the first release
+  (2026-11-09):** all smoke tests and `release:verify` passed, and `mise use
+  github:iilei/canned-schedules-companion@0.1.0` installs it with the attestation verified. The `release`
+  environment (deployments limited to `v*` tags) holds `GPG_PRIVATE_KEY` and `GPG_PASSPHRASE` of the core's key.
 - **Licence: FSL-1.1-ALv2**, like the core; the binary includes the core anyway.
 - **Same conventions as the core:** mise tasks only in CI, actions pinned to SHAs, mise itself pinned in every
   `jdx/mise-action` step, runner labels pinned to explicit images (`ubuntu-26.04`, `macos-26`, `windows-2025`),
@@ -77,12 +80,27 @@ talks to a forge lives here.
 
 ## Open
 
-1. The composite action at the repo root (`preview render` → `actions/upload-artifact` → `preview post` with the
-   `artifact-url`s); it needs the release pipeline (item 2) or a build from the action's checkout.
-2. The first release (`v0.1.0`): needs the GPG secrets (`GPG_PRIVATE_KEY`, `GPG_PASSPHRASE`) in a `release`
-   environment limited to `v*` tags.
-3. The core's `examples/consumer` switches to this binary.
-4. GitLab: `preview post --forge gitlab` (uploads API, notes), the CI/CD component in a GitLab project.
+In this order (agreed 2026-11-08: the action installs a signed release, not a build from its checkout).
+
+1. **Composite action at the repo root** (`action.yml`, `uses: iilei/canned-schedules-companion@v…`):
+   - Inputs: `version` (default: the action's own tag), `body-file` (the issue body, written by the caller from an
+     env var, never interpolated), `out-dir`, `args` (evaluation flags, one per line, as in `canned-schedules.args`),
+     `fiddle-link-base-uri` (empty = no link), `retention-days` (default 30), `token` (default `github.token`),
+     `dry-run`.
+   - Steps: install the release through `jdx/mise-action` (pinned SHA, mise pinned, `install_args`
+     `github:iilei/canned-schedules-companion@<version>`, which verifies the attestation); `preview render`;
+     `actions/upload-artifact` for `schedule.svg` with `archive: false` (valid requests only) and for every file as
+     one zip; `preview post --forge github --repo ${{ github.repository }} --issue <n> --api-url ${{ github.api_url }}`
+     with `--link "Week as SVG=…" --link "All files=…" --note "kept for N days; downloading needs a GitHub login"`;
+     finally fail the step when the request had errors (render's exit 1), after posting.
+   - Step names that write say so ("Post or update the comment on the issue"). The caller sets the trigger, the
+     `Schedule` label condition, `concurrency` per issue and `permissions: contents: read, issues: write`.
+   - Tested in this repo's CI with `dry-run: true` on a fixture body (render and upload run for real; post only
+     reads), plus `actionlint`.
+2. **The core's `examples/consumer`** calls the action instead of its `gh api` steps; `schedule:check` either stays
+   as the local task or calls this binary. Pin bump in the core in the same PR, as for core releases.
+3. **The demo repo** `canned-schedules-demo` (public), set up from the example, for the screen recording.
+4. **GitLab:** `preview post --forge gitlab` (uploads API, notes), the CI/CD component in a GitLab project.
 
 ## Layout
 
