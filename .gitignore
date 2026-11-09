@@ -6,3 +6,5 @@ coverage
 /canned-schedule-preview
 # rumdl's cache (mise run lint:md).
 /.rumdl_cache
+# Written by mise run licenses (and goreleaser) for the release archives.
+/THIRD_PARTY_LICENSES.md

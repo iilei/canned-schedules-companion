@@ -60,6 +60,16 @@ talks to a forge lives here.
     edited.
 - **On GitHub, a binary can't upload workflow artifacts:** the action runs `preview render`, then
   `actions/upload-artifact`, then `preview post` with the links.
+- **Release pipeline (decided 2026-11-09): the core's, adapted.** `.goreleaser.yml`, `.github/workflows/release.yml`
+  and the tasks `licenses`, `release:snapshot`, `release:smoke`, `release:verify` follow the core's (same targets,
+  SBOMs, GPG signatures, provenance attestations, smoke tests on six runners, draft until they pass), without
+  `api:diff` (no library here). **Signed with the core's release key** (`release-key.asc`,
+  `B645234C9CB8175ECA5D78A5C8447A2252E9E7B6`): one key for both projects, so a user checks one fingerprint. The
+  release notes name the core version `go.mod` pins (`CORE_VERSION`). `THIRD_PARTY_LICENSES.md` lists the Go modules
+  in the binary and the Go standard library: no fonts, since the core's library never links the Sphinx kit (core
+  #61). `release:smoke` runs `--version` and `preview render` on `testdata/office-hours.md` and requires all six
+  files. Release by pushing a signed tag (`git tag -s vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`), never on the
+  Releases page; the build job refuses a tag whose release is already published.
 - **Licence: FSL-1.1-ALv2**, like the core; the binary includes the core anyway.
 - **Same conventions as the core:** mise tasks only in CI, actions pinned to SHAs, mise itself pinned in every
   `jdx/mise-action` step, runner labels pinned to explicit images (`ubuntu-26.04`, `macos-26`, `windows-2025`),
@@ -69,8 +79,8 @@ talks to a forge lives here.
 
 1. The composite action at the repo root (`preview render` → `actions/upload-artifact` → `preview post` with the
    `artifact-url`s); it needs the release pipeline (item 2) or a build from the action's checkout.
-2. The release pipeline (goreleaser, signing, attestations, smoke tests) like the core's; needs the GPG secrets in a
-   `release` environment.
+2. The first release (`v0.1.0`): needs the GPG secrets (`GPG_PRIVATE_KEY`, `GPG_PASSPHRASE`) in a `release`
+   environment limited to `v*` tags.
 3. The core's `examples/consumer` switches to this binary.
 4. GitLab: `preview post --forge gitlab` (uploads API, notes), the CI/CD component in a GitLab project.
 

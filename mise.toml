@@ -4,6 +4,10 @@ golangci-lint = "2.15.0"
 go = "1.27.3"
 # Markdown style (.rumdl.toml): README and CLAUDE.md.
 rumdl = "0.3.0"
+# Builds, signs and publishes releases (.goreleaser.yml); the same versions as the core.
+goreleaser = "2.19.0"
+# SBOMs for the release archives (goreleaser's sboms step).
+syft = "1.55.0"
 
 [tasks.fmt]
 description = "Format Go code using the configured golangci-lint formatters"
@@ -44,3 +48,107 @@ run = "go mod tidy"
 [tasks.check]
 description = "Run all non-mutating quality checks"
 depends = ["fmt:check", "vet", "lint", "lint:md", "test", "build"]
+
+[tasks.licenses]
+description = "Write THIRD_PARTY_LICENSES.md: the licences of everything compiled or embedded into the binary"
+# Raw block: mise renders task scripts as templates, and go list's format uses the same braces.
+run = '''
+{% raw %}
+set -eu
+out=THIRD_PARTY_LICENSES.md
+fence() { printf '\n```text\n'; cat "$1"; printf '```\n'; }
+{
+  printf '# Third-party licences\n\nThe canned-schedules-companion binary contains the following Go modules, among them\n'
+  printf 'canned-schedules (FSL-1.1-ALv2), and the Go standard library. Their licences follow.\n'
+  printf 'canned-schedules-companion itself is licensed under LICENSE.md.\n'
+  go list -deps -f '{{if not .Standard}}{{with .Module}}{{if .Version}}{{.Path}} {{.Version}} {{.Dir}}{{end}}{{end}}{{end}}' \
+    ./cmd/canned-schedules-companion | sort -u |
+  while read -r path version dir; do
+    lic=$(ls "$dir" | grep -i -m1 -E '^(licen[cs]e|copying)') || { echo "no licence file in $dir" >&2; exit 1; }
+    printf '\n## %s %s\n' "$path" "$version"
+    fence "$dir/$lic"
+  done
+  printf '\n## Go standard library (%s)\n' "$(go env GOVERSION)"
+  fence "$(go env GOROOT)/LICENSE"
+} > "$out"
+echo "wrote $out"
+{% endraw %}
+'''
+
+[tasks."release:snapshot"]
+description = "Build the release archives locally (no signing, no publishing) into dist/release"
+run = '''
+{% raw %}
+CORE_VERSION=$(go list -m -f '{{.Version}}' github.com/iilei/canned-schedules) \
+  goreleaser release --snapshot --clean --skip=sign,publish
+{% endraw %}
+'''
+
+[tasks."release:smoke"]
+description = "Check one release archive against checksums.txt, unpack it and run the binary (the release smoke test)"
+usage = '''
+arg "<archive>" help="Archive name suffix, e.g. linux_x86_64.tar.gz or windows_amd64.zip"
+flag "--dir <dir>" default="dist/release" help="Directory with the archives and checksums.txt"
+'''
+# Git Bash on the Windows runners; mise would use cmd there otherwise.
+shell = "bash -c"
+run = '''
+set -eu
+root=$(pwd)
+cd "$usage_dir"
+file=$(ls -- *_"$usage_archive")
+sum=$(command -v sha256sum || echo "shasum -a 256")
+# The exact name: "<archive>.sbom.json" contains the archive's name, so a substring match would pick its line too.
+awk -v f="$file" '$2 == f' checksums.txt | $sum --check -
+bin=$(mktemp -d)
+trap 'rm -rf "$bin"' EXIT
+case "$file" in
+  *.zip) unzip -q "$file" -d "$bin" ;;
+  *) tar -xzf "$file" -C "$bin" ;;
+esac
+test -f "$bin/LICENSE.md"
+test -f "$bin/THIRD_PARTY_LICENSES.md"
+exe=$bin/canned-schedules-companion
+if [ -f "$bin/canned-schedules-companion.exe" ]; then exe=$bin/canned-schedules-companion.exe; fi
+"$exe" --version | grep -q '(canned-schedules '
+"$exe" preview render --out-dir "$bin/out" "$root/testdata/office-hours.md"
+for f in comment.md report.json report.md schedule.json schedule.svg schedule.txt; do
+  test -s "$bin/out/$f" || { echo "missing: $f" >&2; exit 1; }
+done
+echo "smoke test passed: $file"
+'''
+
+[tasks."release:verify"]
+description = "Verify a downloaded release: GPG signatures (key in release-key.asc), checksums and .sha256 sidecars"
+usage = '''
+arg "<dir>" help="Directory with the downloaded release files (gh release download <tag>)"
+'''
+run = '''
+set -eu
+key=$(pwd)/release-key.asc
+fpr=B645234C9CB8175ECA5D78A5C8447A2252E9E7B6
+cd "$usage_dir"
+# A throwaway keyring with only the release key, so no other key of the user's can satisfy a signature.
+GNUPGHOME=$(mktemp -d)
+export GNUPGHOME
+trap 'rm -rf "$GNUPGHOME"' EXIT
+gpg --batch --quiet --import "$key"
+verify() {
+  gpg --batch --status-fd 1 --verify "$1.sig" "$1" 2>/dev/null | grep -q "^\[GNUPG:\] VALIDSIG .* $fpr\$" || {
+    echo "BAD signature: $1" >&2
+    exit 1
+  }
+}
+verify checksums.txt
+sum=$(command -v sha256sum || echo "shasum -a 256")
+$sum --check --ignore-missing checksums.txt
+for f in *.tar.gz *.zip; do
+  [ -e "$f" ] || continue
+  verify "$f"
+  if [ -f "$f.sha256" ] && [ "$(cut -c1-64 "$f.sha256")" != "$($sum "$f" | cut -c1-64)" ]; then
+    echo "BAD sidecar: $f.sha256" >&2
+    exit 1
+  fi
+done
+echo "release verified: signed by $fpr, checksums and sidecars match"
+'''
