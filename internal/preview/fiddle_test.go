@@ -2,6 +2,7 @@ package preview_test
 
 import (
 	"encoding/base64"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -132,5 +133,59 @@ func TestParseFiddleBase(t *testing.T) {
 
 	if _, err := preview.ParseFiddleBase("https://iilei.github.io/canned-schedules/?show=week"); err != nil {
 		t.Errorf("a query is fine: %v", err)
+	}
+}
+
+func TestFiddleLinkOptions(t *testing.T) {
+	t.Parallel()
+
+	base, err := preview.ParseFiddleBase(
+		"https://schedules.example.com/?theme=dark&sample-interval=5&arg=--set-config-at&arg=states&arg=--set-config-value&arg=[]",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	link := preview.FiddleLink(base, []byte("# Plan\n"), &cs.Options{
+		SampleInterval: 15,
+		RequireBase:    true,
+		AlertPattern:   "(?i)NOTE|TIP",
+		Config:         []cs.ConfigOverride{{Path: "states", Value: `[{"id":"Off","display-name":"Off"}]`}},
+		Preview:        &cs.PreviewOptions{Downsample: 30},
+	})
+
+	u, err := url.Parse(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	q := u.Query()
+	if q.Get("theme") != "dark" || q["sample-interval"][0] != "15" || len(q["sample-interval"]) != 1 ||
+		q.Get("downsample") != "30" {
+		t.Errorf("the page's own parameters: %v", q)
+	}
+
+	want := []string{
+		"--set-config-at", "states", "--set-config-value", "[]", // the base's own come first
+		"--require-base", "true",
+		"--error-unless-alert-pattern", "(?i)NOTE|TIP",
+		"--set-config-at", "states", "--set-config-value", `[{"id":"Off","display-name":"Off"}]`,
+	}
+	if strings.Join(q["arg"], "\x00") != strings.Join(want, "\x00") {
+		t.Errorf("arg = %q, want %q", q["arg"], want)
+	}
+
+	if u.Fragment != "doc="+base64.RawURLEncoding.EncodeToString([]byte("# Plan\n")) {
+		t.Errorf("fragment = %q", u.Fragment)
+	}
+
+	// Defaults add nothing: the base stays as given.
+	plain, _ := preview.ParseFiddleBase("https://schedules.example.com/?theme=dark")
+	if got := preview.FiddleLink(
+		plain,
+		nil,
+		&cs.Options{Preview: &cs.PreviewOptions{Downsample: cs.DefaultDownsample}},
+	); got != "https://schedules.example.com/?theme=dark#doc=" {
+		t.Errorf("defaults: %q", got)
 	}
 }
