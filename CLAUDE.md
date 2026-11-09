@@ -54,6 +54,10 @@ talks to a forge lives here.
     other options as `?arg=`, one argument each, after the base's own, so the run's config overrides come later and
     win. Without options beyond the defaults the base stays byte for byte. The page checks `?arg=` itself
     (`internal/web/link.go` in the core); pages built before that ignore it.
+  - **Locked by default (decided 2026-11-09, core #58):** `LockFiddle` sets `?lock=1` on the base, so the page
+    leaves only the Markdown editable: the requester changes the schedule, CI owns the flags.
+    `--fiddle-link-lock=false` unlocks (and removes a `lock` in the base). Not security, since the address can be
+    edited.
 - **On GitHub, a binary can't upload workflow artifacts:** the action runs `preview render`, then
   `actions/upload-artifact`, then `preview post` with the links.
 - **Licence: FSL-1.1-ALv2**, like the core; the binary includes the core anyway.

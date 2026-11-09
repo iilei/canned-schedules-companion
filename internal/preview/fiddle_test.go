@@ -114,6 +114,32 @@ func TestFiddleLinkTooLong(t *testing.T) {
 	}
 }
 
+func TestLockFiddle(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		base string
+		lock bool
+		want string
+	}{
+		{"https://schedules.example.com/", true, "https://schedules.example.com/?lock=1"},
+		{"https://schedules.example.com/?theme=dark&lock=0", true, "https://schedules.example.com/?lock=1&theme=dark"},
+		{"https://schedules.example.com/?lock=1&theme=dark", false, "https://schedules.example.com/?theme=dark"},
+		{"https://schedules.example.com/?b=2&a=1", false, "https://schedules.example.com/?b=2&a=1"},
+	} {
+		u, err := preview.ParseFiddleBase(tc.base)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		preview.LockFiddle(u, tc.lock)
+
+		if u.String() != tc.want {
+			t.Errorf("LockFiddle(%q, %v) = %q, want %q", tc.base, tc.lock, u, tc.want)
+		}
+	}
+}
+
 func TestParseFiddleBase(t *testing.T) {
 	t.Parallel()
 
