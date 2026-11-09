@@ -83,7 +83,7 @@ func Render(src []byte, file string, opts *cs.Options, fiddle *url.URL) (*Result
 			}
 		}
 
-		res.Files[Comment] = append(res.Files[Comment], fiddleLine(fiddle, doc)...)
+		res.Files[Comment] = append(res.Files[Comment], fiddleLine(fiddle, doc, opts)...)
 	}
 
 	return res, nil

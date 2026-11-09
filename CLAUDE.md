@@ -49,6 +49,11 @@ talks to a forge lives here.
   over `MaxFiddleLink` (32 KiB) gives way to a notice. Base64url without padding, as the page writes and reads it
   (checked with the page's own `fromHash` logic). Without the flag, `comment.md` stays byte-identical to the core
   example's `schedule:check`.
+  - **The link carries the run's options (decided 2026-11-09, core #57):** `FiddleLink(base, doc, opts)` sets
+    `?sample-interval=` and `?downsample=` (only when not the default; they replace the base's) and appends the
+    other options as `?arg=`, one argument each, after the base's own, so the run's config overrides come later and
+    win. Without options beyond the defaults the base stays byte for byte. The page checks `?arg=` itself
+    (`internal/web/link.go` in the core); pages built before that ignore it.
 - **On GitHub, a binary can't upload workflow artifacts:** the action runs `preview render`, then
   `actions/upload-artifact`, then `preview post` with the links.
 - **Licence: FSL-1.1-ALv2**, like the core; the binary includes the core anyway.

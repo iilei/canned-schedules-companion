@@ -62,6 +62,12 @@ otherwise, so the playground shows the errors at their lines. Browsers never sen
 the schedule stays in the reader's browser even on your own host. The base must be `https` without a fragment; a
 query is kept (e.g. `?theme=dark`). A link longer than 32 KiB is left out with a notice.
 
+The link also carries the run's options, so the playground checks the schedule as the run did:
+`?sample-interval=` and `?downsample=` (they replace the base's), and the other flags as `?arg=`, one argument
+each (`--require-base`, `--base`, `--error-unless-alert-pattern`, `--set-config-at` / `--set-config-value`). The
+page shows them under "Equivalent CLI flags" and the reader can drop them. `?arg=` needs a page built from
+canned-schedules after `v0.2.1`; an older page ignores it and checks with its defaults.
+
 Flags with the canned-schedules CLI's names and meaning: `--sample-interval`, `--require-base true|false`, `--base`,
 `--error-unless-alert-pattern`, `--set-config-at` / `--set-config-value` (repeatable pairs) and
 `--preview-downsample N`.
