@@ -34,6 +34,23 @@ func ParseFiddleBase(s string) (*url.URL, error) {
 	return u, nil
 }
 
+// LockFiddle sets ?lock=1 on base, or removes a lock the base carries. A locked playground (the default) leaves only
+// the schedule editable: the run's flags in the link are the ones its request is checked with. Not security, since
+// the address can be edited; it shows who owns what.
+func LockFiddle(base *url.URL, lock bool) {
+	q := base.Query()
+	switch {
+	case lock:
+		q.Set("lock", "1")
+	case q.Has("lock"):
+		q.Del("lock")
+	default:
+		return // nothing to remove: the base stays as given
+	}
+
+	base.RawQuery = q.Encode()
+}
+
 // FiddleLink is base with the run's options in the query and the document in the fragment as base64url (no
 // padding), the form the preflight page reads from #doc=. Browsers never send the fragment to the server, so the
 // document stays in the reader's browser. The options make the playground check the document as the run did: the

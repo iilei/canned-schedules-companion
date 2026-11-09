@@ -68,6 +68,11 @@ each (`--require-base`, `--base`, `--error-unless-alert-pattern`, `--set-config-
 page shows them under "Equivalent CLI flags" and the reader can drop them. `?arg=` needs a page built from
 canned-schedules after `v0.2.1`; an older page ignores it and checks with its defaults.
 
+The link locks the playground's settings by default (`?lock=1`): the reader edits only the schedule, checked with
+the run's flags, which stay visible but can't be changed or dropped. `--fiddle-link-lock=false` leaves them open
+(and removes a `lock` the base carries). The lock shows who owns what; it isn't security, since anyone can edit the
+address. Pages older than the lock ignore it.
+
 Flags with the canned-schedules CLI's names and meaning: `--sample-interval`, `--require-base true|false`, `--base`,
 `--error-unless-alert-pattern`, `--set-config-at` / `--set-config-value` (repeatable pairs) and
 `--preview-downsample N`.

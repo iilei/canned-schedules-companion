@@ -78,8 +78,20 @@ func TestFiddleLinkFlag(t *testing.T) {
 	}
 
 	if c, _ := os.ReadFile(filepath.Join(out, "comment.md")); !strings.Contains(string(c),
-		"](https://schedules.example.com/#doc=") {
-		t.Errorf("comment.md must link to the playground:\n%s", c)
+		"](https://schedules.example.com/?lock=1#doc=") {
+		t.Errorf("comment.md must link to the locked playground:\n%s", c)
+	}
+
+	if code := run([]string{
+		"preview", "render", "--out-dir", out, "--fiddle-link-lock=false",
+		"--fiddle-link-base-uri", "https://schedules.example.com/?lock=1&theme=dark", "../../testdata/office-hours.md",
+	}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("exit %d: %s", code, stderr.String())
+	}
+
+	if c, _ := os.ReadFile(filepath.Join(out, "comment.md")); !strings.Contains(string(c),
+		"](https://schedules.example.com/?theme=dark#doc=") {
+		t.Errorf("--fiddle-link-lock=false must unlock, even a base with ?lock=1:\n%s", c)
 	}
 }
 

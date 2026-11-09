@@ -163,6 +163,8 @@ func parseRender(args []string, stderr io.Writer) (*cs.Options, string, string, 
 	fs.IntVar(&downsample, "preview-downsample", cs.DefaultDownsample, "preview buckets in minutes; must divide 60")
 	fiddleRaw := fs.String("fiddle-link-base-uri", "", "opt-in: a preflight page you host; the comment links to it "+
 		"with the schedule in the URL fragment")
+	fiddleLock := fs.Bool("fiddle-link-lock", true, "lock the playground's settings (?lock=1), so the reader edits "+
+		"only the schedule, checked with this run's flags; =false lets the reader change them")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, "", "", nil, errUsage
@@ -180,6 +182,8 @@ func parseRender(args []string, stderr io.Writer) (*cs.Options, string, string, 
 		if fiddle, err = preview.ParseFiddleBase(*fiddleRaw); err != nil {
 			return nil, "", "", nil, err
 		}
+
+		preview.LockFiddle(fiddle, *fiddleLock)
 	}
 
 	for i := range at {
