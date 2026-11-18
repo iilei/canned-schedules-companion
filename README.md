@@ -227,6 +227,19 @@ Outputs: `valid` (`true` or `false`), `out-dir`, `svg-url` (valid requests only)
 The zip also holds the request exactly as submitted, named after its origin, for example
 `acme-catalog-issue-12.md`.
 
+## Using the JSON
+
+Every valid request produces `schedule.json`: the canonical week, its transitions with cron expressions, and the rules
+the request was checked against. The [canned-schedules](https://github.com/iilei/canned-schedules) repository shows how
+to put it to work:
+
+| Looking for                                   | Where                                                                                                                        |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| What each field means                         | [Output](https://github.com/iilei/canned-schedules#output)                                                                   |
+| The JSON Schema                               | [`schema/output.schema.json`](https://github.com/iilei/canned-schedules/blob/master/schema/output.schema.json)               |
+| Scheduling capacity on AWS, step by step      | [AWS Auto Scaling scheduled actions](https://github.com/iilei/canned-schedules#aws-auto-scaling-scheduled-actions)           |
+| Working Terraform and AWS CLI files to copy   | [`examples/aws`](https://github.com/iilei/canned-schedules/tree/master/examples/aws)                                         |
+
 ## The week as a PNG
 
 `preview render` writes the week as `schedule.svg`. To use it outside the forge, for example on a slide or in a chat
