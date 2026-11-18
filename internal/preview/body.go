@@ -8,8 +8,14 @@ import (
 	"unicode/utf8"
 )
 
-// GitHubMaxBody is the longest comment GitHub accepts, in characters.
-const GitHubMaxBody = 65536
+// The longest comment each forge accepts: GitHub counts characters, GitLab bytes.
+const (
+	GitHubMaxBody = 65536
+	GitLabMaxBody = 1 << 20
+)
+
+// imageLabel is the alternative text of the week shown inline.
+const imageLabel = "Week as SVG"
 
 // tooLong replaces the report and preview when the comment wouldn't fit; the linked files hold everything.
 const tooLong = "The check result is too long for a comment; the linked files hold the full report.\n"
@@ -49,29 +55,46 @@ func ParseLink(s string) (Link, error) {
 	return Link{Label: label, URL: u.String()}, nil
 }
 
-// Body is the comment to post: comment (comment.md as Render wrote it) with a line of links and an optional note
-// under it. When that exceeds limit characters, the report and preview give way to a short notice, so the issue
+// Body is the comment to post on GitHub: comment (comment.md as Render wrote it) with a line of links and an optional
+// note under it. When that exceeds limit characters, the report and preview give way to a short notice, so the issue
 // still gets the marker, the notice and the links.
 func Body(comment []byte, links []Link, note string, limit int) (string, error) {
+	return body(comment, "", links, note, limit, utf8.RuneCountInString)
+}
+
+// GitLabBody is Body for GitLab: the week shows inline above the links (image is the path the upload returned, empty
+// for none), and limit counts bytes.
+func GitLabBody(comment []byte, image string, links []Link, note string, limit int) (string, error) {
+	return body(comment, image, links, note, limit, func(s string) int { return len(s) })
+}
+
+func body(comment []byte, image string, links []Link, note string, limit int, size func(string) int) (string, error) {
 	c := string(comment)
 	if !strings.HasPrefix(c, Marker+"\n") {
 		return "", fmt.Errorf("%s doesn't start with the marker %s: not written by preview render", Comment, Marker)
 	}
 
-	tail := linkLine(links, note)
+	tail := imageLine(image) + linkLine(links, note)
 
-	body := c + tail
-	if utf8.RuneCountInString(body) <= limit {
-		return body, nil
+	full := c + tail
+	if size(full) <= limit {
+		return full, nil
 	}
 
-	body = Marker + "\n" + tooLong + tail
-	if utf8.RuneCountInString(body) > limit {
-		return "", fmt.Errorf("even the short comment has %d characters, more than %d", utf8.RuneCountInString(body),
-			limit)
+	short := Marker + "\n" + tooLong + tail
+	if size(short) > limit {
+		return "", fmt.Errorf("even the short comment has size %d, more than the limit of %d", size(short), limit)
 	}
 
-	return body, nil
+	return short, nil
+}
+
+func imageLine(image string) string {
+	if image == "" {
+		return ""
+	}
+
+	return "\n![" + imageLabel + "](" + parens.Replace(image) + ")\n"
 }
 
 func linkLine(links []Link, note string) string {

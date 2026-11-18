@@ -79,3 +79,41 @@ func TestParseLink(t *testing.T) {
 		}
 	}
 }
+
+func TestGitLabBodyShowsTheWeek(t *testing.T) {
+	comment := []byte(preview.Marker + "\nreport\n")
+	links := []preview.Link{{Label: "All files", URL: "https://example.com/all"}}
+
+	got, err := preview.GitLabBody(comment, "/uploads/a(1)/schedule.svg", links, "", preview.GitLabMaxBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := preview.Marker + "\nreport\n\n![Week as SVG](/uploads/a%281%29/schedule.svg)\n\n[All files](https://example.com/all)\n"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// TestGitLabBodyCountsBytes: GitLab measures a note in bytes, so text with multi-byte characters reaches the limit
+// with far fewer characters than GitHub's rule would allow.
+func TestGitLabBodyCountsBytes(t *testing.T) {
+	head := preview.Marker + "\n"
+	room := preview.GitLabMaxBody - len(head)
+
+	fits := head + strings.Repeat("x", room)
+	if got, err := preview.GitLabBody([]byte(fits), "", nil, "", preview.GitLabMaxBody); err != nil || got != fits {
+		t.Errorf("a comment of exactly the limit must stay whole (err %v, %d bytes)", err, len(got))
+	}
+
+	over := head + strings.Repeat("é", room/2+1)
+
+	got, err := preview.GitLabBody([]byte(over), "", nil, "", preview.GitLabMaxBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(got, "too long for a comment") || len(got) > preview.GitLabMaxBody {
+		t.Errorf("want the short notice, got %d bytes", len(got))
+	}
+}
