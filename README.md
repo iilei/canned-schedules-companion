@@ -156,6 +156,8 @@ It reads the text from the API, not from the event. A request with errors gets i
 job keeps its files as artifacts under `canned-schedule-preview/`, for further jobs of your own. They include the request
 as GitLab stores it, named after its origin, for example `acme-catalog-issue-12.md` or `acme-catalog-task-13.md`.
 
+[The GitLab flow in screenshots](docs/gitlab-flow/README.md) shows each step, from the new issue to the updated note.
+
 | Input                  | Meaning                                                                          | Default          |
 | ---------------------- | -------------------------------------------------------------------------------- | ---------------- |
 | `stage`                | the job's stage                                                                  | `test`           |
