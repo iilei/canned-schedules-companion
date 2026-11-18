@@ -110,6 +110,11 @@ talks to a forge lives here.
   labels come from the API, so a forged payload can't supply them. It runs on open, reopen and updates that change the
   description or labels (closing an issue is an update too), one at a time (`resource_group`), without a checkout
   (`GIT_STRATEGY: none`).
+  - **Included from the release tag (decided 2026-11-18):** teams use `include: remote` with the raw GitHub URL of
+    `refs/tags/<tag>` and an `integrity` hash, because a real `component:` include only works within one GitLab instance.
+    The PR that prepares a release updates the tag and the hash in the README, and `action:version` fails the release
+    when they don't match. Immutable releases are on, so a published tag can't move (from `v0.1.2`; earlier ones rely
+    on the hash) and a published version number can't be reused.
   - **PNG and designs stay out of the component (decided 2026-11-18):** GitLab's designs reject SVG, so they would need
     a PNG, and that is a sidecar for a demo, not part of the check. The upload is named
     `schedule-<issue>-<first 12 characters of the SVG's SHA-256>.svg` and the job keeps `schedule.svg` as an artifact, so
@@ -128,7 +133,7 @@ talks to a forge lives here.
 
 ## Open
 
-1. **GitLab:** publish the component in a GitLab project of the CI/CD catalog.
+1. **GitLab catalog, only if teams ask:** a project on gitlab.com for catalog search and the short `component:` syntax.
 2. **The screen recording** with the public demo repo
    [`canned-schedules-demo`](https://github.com/iilei/canned-schedules-demo), a copy of the core's `examples/consumer`.
    Its first request (issue #1) ran the action for real on 2026-11-18: the comment was created, updated in place for an

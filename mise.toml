@@ -75,7 +75,7 @@ echo "the action's files are complete"
 '''
 
 [tasks."action:version"]
-description = "Check that action.yml and the GitLab component install the release they are tagged with"
+description = "Check that action.yml, the GitLab component and the README name the release they are tagged with"
 usage = '''
 arg "<tag>" help="The release tag, e.g. v1.2.3"
 '''
@@ -94,6 +94,16 @@ if [ "$have" != "$want" ]; then
   exit 1
 fi
 echo "templates/issue-preview.yml installs $have"
+integrity=sha256-$(openssl dgst -sha256 -binary templates/issue-preview.yml | base64)
+grep -Fq "/refs/tags/$usage_tag/templates/issue-preview.yml" README.md || {
+  echo "README.md doesn't include the template from $usage_tag" >&2
+  exit 1
+}
+grep -Fq "integrity: $integrity" README.md || {
+  echo "README.md has another integrity for the template: want $integrity" >&2
+  exit 1
+}
+echo "README.md includes the template from $usage_tag"
 '''
 
 [tasks.build]

@@ -127,9 +127,7 @@ GITLAB_TOKEN=glpat-… canned-schedules-companion preview post --forge gitlab \
 ## GitLab CI/CD component
 
 `templates/issue-preview.yml` checks a schedule request issue and keeps one note on it up to date, with the week shown
-inline. GitLab can't start a pipeline from an issue event by itself, so a webhook calls a pipeline trigger. The
-component isn't in the public CI/CD catalog yet: keep a copy of the file in a GitLab project of your own, under
-`templates/`, and include it from there. It needs `--forge gitlab`, so use `v0.1.1` or later.
+inline. GitLab can't start a pipeline from an issue event by itself, so a webhook calls a pipeline trigger.
 
 1. **Create a project access token** in the project that holds the issues, with the `api` scope and the Planner role.
 2. **Store it** as the CI/CD variable `CANNED_SCHEDULES_TOKEN`, masked. Before it expires, **rotate** it and store the
@@ -143,12 +141,16 @@ component isn't in the public CI/CD catalog yet: keep a copy of the file in a Gi
    https://gitlab.example.com/api/v4/projects/<project ID>/ref/<default branch>/trigger/pipeline?token=<trigger token>
    ```
 
-5. **Include the component** in the project's `.gitlab-ci.yml`:
+5. **Include the template** in the project's `.gitlab-ci.yml`, directly from this repository's release tag:
 
    ```yaml
    include:
-     - component: $CI_SERVER_FQDN/<group>/<component project>/issue-preview@<ref>
+     - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.1.1/templates/issue-preview.yml
+       integrity: sha256-chljRwjQYUwJwoNkLU0tPZ7F4x3nZ4OenDNT/BZ3o8M=
    ```
+
+   GitLab rejects the file if it doesn't match `integrity`. Inputs go under `inputs:` of the same entry. If your GitLab
+   can't reach GitHub, keep a copy of the file in a project of your own and use `include: project` instead.
 
 The job runs when an issue with the `Schedule` label is opened or reopened, and when its description or labels change.
 It reads the text from the API, not from the event. A request with errors gets its note, and the job then fails. The
