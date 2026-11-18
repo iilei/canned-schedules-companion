@@ -149,8 +149,7 @@ inline. GitLab can't start a pipeline from an issue event by itself, so a webhoo
        integrity: sha256-chljRwjQYUwJwoNkLU0tPZ7F4x3nZ4OenDNT/BZ3o8M=
    ```
 
-   GitLab rejects the file if it doesn't match `integrity`. Inputs go under `inputs:` of the same entry. If your GitLab
-   can't reach GitHub, keep a copy of the file in a project of your own and use `include: project` instead.
+   GitLab rejects the file if it doesn't match `integrity`. Inputs go under `inputs:` of the same entry.
 
 The job runs when an issue with the `Schedule` label is opened or reopened, and when its description or labels change.
 It reads the text from the API, not from the event. A request with errors gets its note, and the job then fails. The
