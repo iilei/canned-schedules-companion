@@ -76,6 +76,9 @@ jobs:
             exit 1
           fi
 
+      # Fails before any draft exists when action.yml would install another release than this tag.
+      - run: mise run action:version "$GITHUB_REF_NAME"
+
       # The core version the release notes name: the one go.mod pins.
       - run: echo "CORE_VERSION=$(go list -m -f '{{.Version}}' github.com/iilei/canned-schedules)" >> "$GITHUB_ENV"
 

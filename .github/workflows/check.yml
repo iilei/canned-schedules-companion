@@ -54,3 +54,88 @@ jobs:
       - run: go build ./...
 
       - run: go test ./...
+
+  # The composite action at the repo root, against the newest release: it renders and uploads for real, and the dry run
+  # only reads the comments of an existing pull request (issues and pull requests share their numbers and comments).
+  action:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read # The dry run lists the comments.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: valid
+        uses: ./
+        with:
+          body-file: testdata/office-hours.md
+          version: 0.1.0 # The newest release; action.yml's default may name the one being prepared.
+          issue: 11
+          args: |
+            # Skipped, like the blank line below.
+
+            --sample-interval
+            15
+          dry-run: true
+
+      - id: invalid
+        continue-on-error: true
+        uses: ./
+        with:
+          body-file: testdata/invalid-name.md
+          version: 0.1.0 # The newest release; action.yml's default may name the one being prepared.
+          issue: 11
+          dry-run: true
+
+      # mise only, no tools: the task needs none.
+      - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+        with:
+          version: 2026.10.19 # mise itself; pinned, see CLAUDE.md
+          install: false
+
+      - env:
+          MISE_TASK_RUN_AUTO_INSTALL: "false"
+          VALID_DIR: ${{ steps.valid.outputs.out-dir }}
+          INVALID_DIR: ${{ steps.invalid.outputs.out-dir }}
+          VALID_OUTPUT: ${{ steps.valid.outputs.valid }}
+          INVALID_OUTPUT: ${{ steps.invalid.outputs.valid }}
+          INVALID_OUTCOME: ${{ steps.invalid.outcome }}
+        run: mise run action:assert "$VALID_DIR" "$INVALID_DIR" "$VALID_OUTPUT" "$INVALID_OUTPUT" "$INVALID_OUTCOME"
+
+  # Every release archive, cross-compiled as the release would (no signing, no publishing): a dependency update merges
+  # without a human, so it has to prove that all release targets still build.
+  binaries:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # goreleaser needs the tags for the version.
+          persist-credentials: false
+
+      - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+        with:
+          version: 2026.10.19 # mise itself; pinned, see CLAUDE.md
+
+      - run: mise run release:snapshot
+
+  # Merges Dependabot's pull requests once everything above is green. "needs" is the gate: action and binaries aren't
+  # required checks in the ruleset, so auto-merge is only switched on after they passed. Rebase is the only merge
+  # method allowed.
+  automerge:
+    needs: [check, test, action, binaries]
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: write # Merges the pull request.
+      pull-requests: write # Switches auto-merge on.
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --rebase "$PR_URL"

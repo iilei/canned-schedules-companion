@@ -73,6 +73,24 @@ talks to a forge lives here.
   (2026-11-09):** all smoke tests and `release:verify` passed, and `mise use
   github:iilei/canned-schedules-companion@0.1.0` installs it with the attestation verified. The `release`
   environment (deployments limited to `v*` tags) holds `GPG_PRIVATE_KEY` and `GPG_PASSPHRASE` of the core's key.
+- **Composite action at the repo root (implemented 2026-11-18):** `action.yml`, for GitHub's issue preview. It
+  installs the release through `jdx/mise-action` (attestation verified, no cache), runs `preview render`, uploads
+  `schedule.svg` unzipped (valid requests only) and every file as one zip, runs `preview post`, and fails last when
+  the request has errors. The caller sets the trigger, the `Schedule` label condition, `concurrency` per issue and
+  `permissions: contents: read, issues: write`.
+  - **`version` defaults to a literal release, not `github.action_ref` (decided 2026-11-18):** callers pin actions to
+    commit SHAs, and a SHA names no release. The PR that prepares a release bumps the default; `action:version`
+    fails the release build when it differs from the tag. CI passes the newest published release explicitly, so that
+    PR stays green before the tag exists.
+  - **Everything runs from a new directory under `RUNNER_TEMP`,** so a `mise.toml` in the caller's checkout can't
+    change what gets installed, and reports name the request `request.md`, not a path on the runner.
+  - **`comment-author` is an input,** because a `token` other than `github.token` writes under another login.
+  - Tested in `check.yml` (job `action`) with a valid and an invalid request, as dry runs against an existing pull
+    request; `lint:actions` runs `actionlint`.
+- **Dependabot auto-merge (decided 2026-11-18), as in the core:** on pull requests opened by Dependabot, `check.yml`
+  adds `binaries` (`release:snapshot`) and `automerge`, which needs `check`, `test`, `action` and `binaries`, then
+  runs `gh pr merge --auto --rebase` with the job's `GITHUB_TOKEN`. `needs` is the gate, so the ruleset's required
+  checks stay as they are.
 - **Licence: FSL-1.1-ALv2**, like the core; the binary includes the core anyway.
 - **Same conventions as the core:** mise tasks only in CI, actions pinned to SHAs, mise itself pinned in every
   `jdx/mise-action` step, runner labels pinned to explicit images (`ubuntu-26.04`, `macos-26`, `windows-2025`),
@@ -83,29 +101,15 @@ talks to a forge lives here.
 In this order (agreed 2026-11-08: the action installs a signed release, not a build from its checkout; reordered
 2026-11-18: GitLab right after the action, before the core's example and the demo repo).
 
-1. **Composite action at the repo root** (`action.yml`, `uses: iilei/canned-schedules-companion@v…`):
-   - Inputs: `version` (default: the action's own tag), `body-file` (the issue body, written by the caller from an
-     env var, never interpolated), `out-dir`, `args` (evaluation flags, one per line, as in `canned-schedules.args`),
-     `fiddle-link-base-uri` (empty = no link), `retention-days` (default 30), `token` (default `github.token`),
-     `dry-run`.
-   - Steps: install the release through `jdx/mise-action` (pinned SHA, mise pinned, `install_args`
-     `github:iilei/canned-schedules-companion@<version>`, which verifies the attestation); `preview render`;
-     `actions/upload-artifact` for `schedule.svg` with `archive: false` (valid requests only) and for every file as
-     one zip; `preview post --forge github --repo ${{ github.repository }} --issue <n> --api-url ${{ github.api_url }}`
-     with `--link "Week as SVG=…" --link "All files=…" --note "kept for N days; downloading needs a GitHub login"`;
-     finally fail the step when the request had errors (render's exit 1), after posting.
-   - Step names that write say so ("Post or update the comment on the issue"). The caller sets the trigger, the
-     `Schedule` label condition, `concurrency` per issue and `permissions: contents: read, issues: write`.
-   - Tested in this repo's CI with `dry-run: true` on a fixture body (render and upload run for real; post only
-     reads), plus `actionlint`.
-2. **GitLab:** `preview post --forge gitlab` (uploads API, notes), the CI/CD component in a GitLab project. The
+1. **GitLab:** `preview post --forge gitlab` (uploads API, notes), the CI/CD component in a GitLab project. The
    maintainer has a working Docker setup for a local GitLab to test against.
-3. **The core's `examples/consumer`** calls the action instead of its `gh api` steps; `schedule:check` either stays
+2. **The core's `examples/consumer`** calls the action instead of its `gh api` steps; `schedule:check` either stays
    as the local task or calls this binary. Pin bump in the core in the same PR, as for core releases.
-4. **The demo repo** `canned-schedules-demo` (public), set up from the example, for the screen recording.
+3. **The demo repo** `canned-schedules-demo` (public), set up from the example, for the screen recording.
 
 ## Layout
 
+- `action.yml`: the composite GitHub Action (step 1).
 - `cmd/canned-schedules-companion`: the binary, flag parsing, input reading, atomic writes, exit codes.
 - `internal/preview`: step 1's local part (`Render`, `Body`, `ParseLink`, `ParseFiddleBase`, `FiddleLink`), pure.
 - `internal/forge/github`: the only code that talks to GitHub.
