@@ -75,7 +75,7 @@ echo "the action's files are complete"
 '''
 
 [tasks."action:version"]
-description = "Check that action.yml installs the release it is tagged with"
+description = "Check that action.yml and the GitLab component install the release they are tagged with"
 usage = '''
 arg "<tag>" help="The release tag, e.g. v1.2.3"
 '''
@@ -88,6 +88,12 @@ if [ "$have" != "$want" ]; then
   exit 1
 fi
 echo "action.yml installs $have"
+have=$(awk '/^    version:/ { found = 1 } found && /default:/ { gsub(/"/, "", $2); print $2; exit }' templates/issue-preview.yml)
+if [ "$have" != "$want" ]; then
+  echo "templates/issue-preview.yml installs $have, but the tag is $want: bump the default of its version input" >&2
+  exit 1
+fi
+echo "templates/issue-preview.yml installs $have"
 '''
 
 [tasks.build]

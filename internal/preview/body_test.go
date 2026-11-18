@@ -117,3 +117,10 @@ func TestGitLabBodyCountsBytes(t *testing.T) {
 		t.Errorf("want the short notice, got %d bytes", len(got))
 	}
 }
+
+func TestUploadName(t *testing.T) {
+	// The SHA-256 of "abc" starts with ba7816bf8f01.
+	if got := preview.UploadName(7, []byte("abc")); got != "schedule-7-ba7816bf8f01.svg" {
+		t.Errorf("got %q", got)
+	}
+}

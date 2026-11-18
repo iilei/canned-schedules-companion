@@ -1,6 +1,8 @@
 package preview
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/url"
@@ -17,6 +19,9 @@ const (
 // imageLabel is the alternative text of the week shown inline.
 const imageLabel = "Week as SVG"
 
+// uploadHashLen is how much of the SVG's SHA-256 names the upload: enough to tell two weeks of one issue apart.
+const uploadHashLen = 12
+
 // tooLong replaces the report and preview when the comment wouldn't fit; the linked files hold everything.
 const tooLong = "The check result is too long for a comment; the linked files hold the full report.\n"
 
@@ -32,6 +37,13 @@ var (
 type Link struct {
 	Label string
 	URL   string
+}
+
+// UploadName is the name of the week uploaded to a forge. The hash lets another job tell which week a comment shows.
+func UploadName(issue int, svg []byte) string {
+	sum := sha256.Sum256(svg)
+
+	return fmt.Sprintf("schedule-%d-%s.svg", issue, hex.EncodeToString(sum[:])[:uploadHashLen])
 }
 
 // ParseLink reads "label=https://…".

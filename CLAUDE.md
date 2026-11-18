@@ -105,6 +105,23 @@ talks to a forge lives here.
   adds `binaries` (`release:snapshot`) and `automerge`, which needs `check`, `test`, `action` and `binaries`, then
   runs `gh pr merge --auto --rebase` with the job's `GITHUB_TOKEN`. `needs` is the gate, so the ruleset's required
   checks stay as they are.
+- **GitLab CI/CD component (implemented 2026-11-18):** `templates/issue-preview.yml`, one job. An issue webhook calls a
+  pipeline trigger URL, and the job reads the event from `TRIGGER_PAYLOAD`. The event only names the issue: the text and
+  labels come from the API, so a forged payload can't supply them. It runs on open, reopen and updates that change the
+  description or labels (closing an issue is an update too), one at a time (`resource_group`), without a checkout
+  (`GIT_STRATEGY: none`).
+  - **PNG and designs stay out of the component (decided 2026-11-18):** GitLab's designs reject SVG, so they would need
+    a PNG, and that is a sidecar for a demo, not part of the check. The upload is named
+    `schedule-<issue>-<first 12 characters of the SVG's SHA-256>.svg` and the job keeps `schedule.svg` as an artifact, so
+    a later job can convert it and swap the note's link when the hash still matches. A built-in version (three jobs,
+    `--design`, the week's hash in the note) is on the branch `spike/gitlab-design`.
+  - **Rotate the token, never replace it (decided 2026-11-18):** rotation keeps the bot user (tested). Only a Maintainer
+    can edit or delete another user's note (403 for Planner, Reporter and Developer), so taking over an old bot's notes
+    was rejected: it would give a job that reads untrusted text far more rights. Rotating an expired token is untested.
+  - `CANNED_SCHEDULES_TOKEN` is a project access token with `api` and the Planner role; `CI_JOB_TOKEN` can read the
+    issue but gets 401 for notes and uploads (tested). The download is verified with GPG against the pinned release key,
+    then against `checksums.txt`; an image that already has the binary skips it. `action:version` also checks this
+    file's default. The catalog project on gitlab.com doesn't exist yet.
 - **Licence: FSL-1.1-ALv2**, like the core; the binary includes the core anyway.
 - **Same conventions as the core:** mise tasks only in CI, actions pinned to SHAs, mise itself pinned in every
   `jdx/mise-action` step, runner labels pinned to explicit images (`ubuntu-26.04`, `macos-26`, `windows-2025`),
@@ -115,9 +132,7 @@ talks to a forge lives here.
 In this order (agreed 2026-11-08: the action installs a signed release, not a build from its checkout; reordered
 2026-11-18: GitLab right after the action, before the core's example and the demo repo).
 
-1. **GitLab:** the CI/CD component in a GitLab project, tested on the local GitLab (`../hatchet_gitlab_demo`,
-   `docker compose up -d gitlab gitlab-runner`). Run one job per issue at a time (`resource_group`):
-   concurrent runs each create a note, and only the next run removes the duplicates.
+1. **GitLab:** publish the component in a GitLab project of the CI/CD catalog, once `v0.1.1` is released.
 2. **The core's `examples/consumer`** calls the action instead of its `gh api` steps; `schedule:check` either stays
    as the local task or calls this binary. Pin bump in the core in the same PR, as for core releases.
 3. **The demo repo** `canned-schedules-demo` (public), set up from the example, for the screen recording.
@@ -125,6 +140,7 @@ In this order (agreed 2026-11-08: the action installs a signed release, not a bu
 ## Layout
 
 - `action.yml`: the composite GitHub Action (step 1).
+- `templates/issue-preview.yml`: the GitLab CI/CD component (step 1).
 - `cmd/canned-schedules-companion`: the binary, flag parsing, input reading, atomic writes, exit codes.
 - `internal/preview`: step 1's local part (`Render`, `Body`, `ParseLink`, `ParseFiddleBase`, `FiddleLink`), pure.
 - `internal/forge`: what the forge clients share.
