@@ -29,6 +29,10 @@ talks to a forge lives here.
 - **Evaluation flags keep the core CLI's names and meaning** (`--require-base true|false` takes a value), so a
   `canned-schedules.args` line works here too.
 - **Exit codes:** 0 valid, 1 request errors (files still written), 2 usage or environment.
+- **The bundle holds the request (decided 2026-11-18):** the action's zip and the GitLab job's artifacts contain the
+  submitted text as `<project path with hyphens>-<kind>-<number>.md` (`acme-catalog-issue-12.md`), so a downloaded file
+  says where it came from. On GitHub the kind is always `issue`; on GitLab it follows the work item's type. GitLab
+  removes quick actions from a description when it stores it, so its copy is the stored text.
 - **`preview post --forge github` (implemented 2026-11-08):** `internal/forge/github` with plain `net/http` (no
   dependency): lists the issue's comments (100 per page), takes those starting with the marker and written by
   `--author` (default `github-actions[bot]`), updates the oldest, deletes the others, or creates one. Everything is

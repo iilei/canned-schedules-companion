@@ -71,6 +71,8 @@ done
 for d in "$usage_valid_dir" "$usage_invalid_dir"; do
   head -n 1 "$d/comment.md" | grep -qx '<!-- canned-schedules:issue-preview -->'
 done
+cmp testdata/office-hours.md "$usage_valid_dir"/*-issue-11.md
+cmp testdata/invalid-name.md "$usage_invalid_dir"/*-issue-11.md
 echo "the action's files are complete"
 '''
 

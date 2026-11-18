@@ -162,6 +162,13 @@ canned-schedule-preview:
       (cd "$work_dir" && canned-schedules-companion preview render "$@" --out-dir "$out_dir" request.md) || rc=$?
       [ "$rc" -le 1 ] || exit "$rc"
 
+      # The request as GitLab stores it, named after where it came from: project, kind of work item and number.
+      kind=$(jq -r '(.type // "issue") | ascii_downcase' "$work_dir/issue.json")
+      case $kind in
+        '' | *[!a-z_]*) kind=issue ;;
+      esac
+      cp "$work_dir/request.md" "$out_dir/$(printf '%s' "$CI_PROJECT_PATH" | tr '/' '-')-$kind-$iid.md"
+
       set -- --forge gitlab --repo "$CI_PROJECT_ID" --issue "$iid" --api-url "$CS_API_URL" \
         --token-env CANNED_SCHEDULES_TOKEN
       case $CI_JOB_URL in

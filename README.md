@@ -153,7 +153,8 @@ inline. GitLab can't start a pipeline from an issue event by itself, so a webhoo
 
 The job runs when an issue with the `Schedule` label is opened or reopened, and when its description or labels change.
 It reads the text from the API, not from the event. A request with errors gets its note, and the job then fails. The
-job keeps its files as artifacts under `canned-schedule-preview/`, for further jobs of your own.
+job keeps its files as artifacts under `canned-schedule-preview/`, for further jobs of your own. They include the request
+as GitLab stores it, named after its origin, for example `acme-catalog-issue-12.md` or `acme-catalog-task-13.md`.
 
 | Input                  | Meaning                                                                          | Default          |
 | ---------------------- | -------------------------------------------------------------------------------- | ---------------- |
@@ -222,6 +223,9 @@ jobs:
 | `dry-run`              | `true` writes no comment but says what would change; the files are still uploaded       | `false`               |
 
 Outputs: `valid` (`true` or `false`), `out-dir`, `svg-url` (valid requests only) and `files-url`.
+
+The zip also holds the request exactly as submitted, named after its origin, for example
+`acme-catalog-issue-12.md`.
 
 ## The week as a PNG
 
