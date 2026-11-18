@@ -73,7 +73,8 @@ talks to a forge lives here.
   (2026-11-09):** all smoke tests and `release:verify` passed, and `mise use
   github:iilei/canned-schedules-companion@0.1.0` installs it with the attestation verified. The `release`
   environment (deployments limited to `v*` tags) holds `GPG_PRIVATE_KEY` and `GPG_PASSPHRASE` of the core's key.
-- **Composite action at the repo root (implemented 2026-11-18):** `action.yml`, for GitHub's issue preview. It
+- **Composite action at the repo root (implemented 2026-11-18, first released in `v0.1.1`):** `action.yml`, for
+  GitHub's issue preview. It
   installs the release through `jdx/mise-action` (attestation verified, no cache), runs `preview render`, uploads
   `schedule.svg` unzipped (valid requests only) and every file as one zip, runs `preview post`, and fails last when
   the request has errors. The caller sets the trigger, the `Schedule` label condition, `concurrency` per issue and

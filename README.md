@@ -113,7 +113,7 @@ GITHUB_TOKEN=$(gh auth token) canned-schedules-companion preview post --forge gi
 The action at the root of this repository checks a schedule request issue and keeps one comment on it up to date. It
 installs a signed release, runs `preview render`, uploads the files as workflow artifacts and runs `preview post`. A
 request with errors still gets its comment; the job fails afterwards. It is tested on Linux runners and is available
-from the first release after `v0.1.0`.
+from `v0.1.1`.
 
 ```yaml
 name: schedule request
