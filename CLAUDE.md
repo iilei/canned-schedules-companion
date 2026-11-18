@@ -113,8 +113,7 @@ talks to a forge lives here.
   - **PNG and designs stay out of the component (decided 2026-11-18):** GitLab's designs reject SVG, so they would need
     a PNG, and that is a sidecar for a demo, not part of the check. The upload is named
     `schedule-<issue>-<first 12 characters of the SVG's SHA-256>.svg` and the job keeps `schedule.svg` as an artifact, so
-    a later job can convert it and swap the note's link when the hash still matches. A built-in version (three jobs,
-    `--design`, the week's hash in the note) is on the branch `spike/gitlab-design`.
+    a later job can convert it and swap the note's link when the hash still matches.
   - **Rotate the token, never replace it (decided 2026-11-18):** rotation keeps the bot user (tested). Only a Maintainer
     can edit or delete another user's note (403 for Planner, Reporter and Developer), so taking over an old bot's notes
     was rejected: it would give a job that reads untrusted text far more rights. Rotating an expired token is untested.
@@ -129,13 +128,11 @@ talks to a forge lives here.
 
 ## Open
 
-In this order (agreed 2026-11-08: the action installs a signed release, not a build from its checkout; reordered
-2026-11-18: GitLab right after the action, before the core's example and the demo repo).
-
-1. **GitLab:** publish the component in a GitLab project of the CI/CD catalog, once `v0.1.1` is released.
-2. **The core's `examples/consumer`** calls the action instead of its `gh api` steps; `schedule:check` either stays
-   as the local task or calls this binary. Pin bump in the core in the same PR, as for core releases.
-3. **The demo repo** `canned-schedules-demo` (public), set up from the example, for the screen recording.
+1. **GitLab:** publish the component in a GitLab project of the CI/CD catalog.
+2. **The screen recording** with the public demo repo
+   [`canned-schedules-demo`](https://github.com/iilei/canned-schedules-demo), a copy of the core's `examples/consumer`.
+   Its first request (issue #1) ran the action for real on 2026-11-18: the comment was created, updated in place for an
+   invalid and a fixed edit, and the artifacts were uploaded.
 
 ## Layout
 
