@@ -80,7 +80,8 @@ talks to a forge lives here.
 
 ## Open
 
-In this order (agreed 2026-11-08: the action installs a signed release, not a build from its checkout).
+In this order (agreed 2026-11-08: the action installs a signed release, not a build from its checkout; reordered
+2026-11-18: GitLab right after the action, before the core's example and the demo repo).
 
 1. **Composite action at the repo root** (`action.yml`, `uses: iilei/canned-schedules-companion@v…`):
    - Inputs: `version` (default: the action's own tag), `body-file` (the issue body, written by the caller from an
@@ -97,10 +98,11 @@ In this order (agreed 2026-11-08: the action installs a signed release, not a bu
      `Schedule` label condition, `concurrency` per issue and `permissions: contents: read, issues: write`.
    - Tested in this repo's CI with `dry-run: true` on a fixture body (render and upload run for real; post only
      reads), plus `actionlint`.
-2. **The core's `examples/consumer`** calls the action instead of its `gh api` steps; `schedule:check` either stays
+2. **GitLab:** `preview post --forge gitlab` (uploads API, notes), the CI/CD component in a GitLab project. The
+   maintainer has a working Docker setup for a local GitLab to test against.
+3. **The core's `examples/consumer`** calls the action instead of its `gh api` steps; `schedule:check` either stays
    as the local task or calls this binary. Pin bump in the core in the same PR, as for core releases.
-3. **The demo repo** `canned-schedules-demo` (public), set up from the example, for the screen recording.
-4. **GitLab:** `preview post --forge gitlab` (uploads API, notes), the CI/CD component in a GitLab project.
+4. **The demo repo** `canned-schedules-demo` (public), set up from the example, for the screen recording.
 
 ## Layout
 
