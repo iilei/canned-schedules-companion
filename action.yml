@@ -1,0 +1,197 @@
+name: Canned schedule issue preview
+description: Checks a schedule request issue and keeps one comment on it up to date, with the week as a download.
+branding:
+  icon: calendar
+  color: green
+
+# The caller sets the trigger, the label condition, concurrency per issue and the permissions (contents: read,
+# issues: write). Inputs reach the shell only through environment variables, never through ${{ }} inside a script.
+inputs:
+  body-file:
+    description: The issue body as a file. Write it from an environment variable, never by interpolating it.
+    required: true
+  version:
+    description: The canned-schedules-companion release to install. The default is the release this action belongs to.
+    default: "0.1.0"
+  issue:
+    description: The issue to comment on.
+    default: ${{ github.event.issue.number }}
+  out-dir:
+    description: Where the files go. Empty means a new directory under the runner's temporary directory.
+    default: ""
+  args:
+    description: Evaluation flags, one argument per line, as in canned-schedules.args (blank lines and lines starting with # are skipped).
+    default: ""
+  fiddle-link-base-uri:
+    description: A preflight page you host. The comment then links to it with the schedule in the URL fragment. Empty means no link.
+    default: ""
+  retention-days:
+    description: How many days the uploaded files are kept.
+    default: "30"
+  token:
+    description: The token that reads and writes the issue's comments.
+    default: ${{ github.token }}
+  comment-author:
+    description: The login behind the token. Only its comments count as this step's own.
+    default: github-actions[bot]
+  dry-run:
+    description: true reads the issue's comments and says what would change, but writes no comment. The files are still uploaded.
+    default: "false"
+
+outputs:
+  valid:
+    description: true when the request has no errors, false when it has.
+    value: ${{ steps.render.outputs.valid }}
+  out-dir:
+    description: The directory with the files.
+    value: ${{ steps.setup.outputs.out-dir }}
+  svg-url:
+    description: The link to the week as SVG (valid requests only).
+    value: ${{ steps.svg.outputs.artifact-url }}
+  files-url:
+    description: The link to all files as one zip.
+    value: ${{ steps.files.outputs.artifact-url }}
+
+runs:
+  using: composite
+  steps:
+    # Everything runs from a new directory, so a mise.toml in the caller's checkout can't change what gets installed,
+    # and the report names the request as request.md instead of a path on the runner.
+    - id: setup
+      name: Check the inputs and prepare a working directory
+      shell: bash
+      env:
+        BODY_FILE: ${{ inputs.body-file }}
+        VERSION: ${{ inputs.version }}
+        ISSUE: ${{ inputs.issue }}
+        OUT_DIR: ${{ inputs.out-dir }}
+        RETENTION_DAYS: ${{ inputs.retention-days }}
+        DRY_RUN: ${{ inputs.dry-run }}
+      run: |
+        set -euo pipefail
+        fail() {
+          printf '::error::%s\n' "$1"
+          exit 2
+        }
+        [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || fail 'version: want a release such as 1.2.3'
+        [[ $ISSUE =~ ^[1-9][0-9]*$ ]] || fail 'issue: want an issue number'
+        [[ $RETENTION_DAYS =~ ^[1-9][0-9]*$ ]] || fail 'retention-days: want a whole number of days'
+        [[ $DRY_RUN == true || $DRY_RUN == false ]] || fail 'dry-run: want true or false'
+        [[ $OUT_DIR != *$'\n'* ]] || fail 'out-dir: must be one line'
+        case $BODY_FILE in /*) ;; *) BODY_FILE=$GITHUB_WORKSPACE/$BODY_FILE ;; esac
+        [[ -f $BODY_FILE ]] || fail 'body-file: no such file'
+        work_dir=$(mktemp -d "$RUNNER_TEMP/canned-schedules-companion.XXXXXX")
+        cp "$BODY_FILE" "$work_dir/request.md"
+        case $OUT_DIR in
+          '') OUT_DIR=$work_dir/preview ;;
+          /*) ;;
+          *) OUT_DIR=$GITHUB_WORKSPACE/$OUT_DIR ;;
+        esac
+        {
+          printf 'work-dir=%s\n' "$work_dir"
+          printf 'out-dir=%s\n' "$OUT_DIR"
+        } >> "$GITHUB_OUTPUT"
+
+    # Verifies the release's build provenance attestation on install.
+    - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+      with:
+        version: 2026.10.19 # mise itself; pinned, see CLAUDE.md
+        install_args: github:iilei/canned-schedules-companion@${{ inputs.version }}
+        working_directory: ${{ steps.setup.outputs.work-dir }}
+        github_token: ${{ inputs.token }}
+        cache: false
+
+    # Exit 1 means the request has errors: the comment still has to reach the issue, so the job fails only at the end.
+    - id: render
+      name: Check the request and render the preview
+      shell: bash
+      working-directory: ${{ steps.setup.outputs.work-dir }}
+      env:
+        VERSION: ${{ inputs.version }}
+        FLAG_LINES: ${{ inputs.args }}
+        FIDDLE_LINK_BASE_URI: ${{ inputs.fiddle-link-base-uri }}
+        OUT_DIR: ${{ steps.setup.outputs.out-dir }}
+      run: |
+        set -uo pipefail
+        args=()
+        while IFS= read -r line || [[ -n $line ]]; do
+          line=${line%$'\r'}
+          case $line in '' | '#'*) continue ;; esac
+          args+=("$line")
+        done <<< "$FLAG_LINES"
+        if [[ -n $FIDDLE_LINK_BASE_URI ]]; then
+          args+=(--fiddle-link-base-uri "$FIDDLE_LINK_BASE_URI")
+        fi
+        rc=0
+        mise exec "github:iilei/canned-schedules-companion@$VERSION" -- canned-schedules-companion preview render \
+          ${args[@]+"${args[@]}"} --out-dir "$OUT_DIR" request.md || rc=$?
+        # mise can exit 1 too. Only a finished render leaves the comment behind.
+        if [[ $rc -gt 1 || ! -f $OUT_DIR/comment.md ]]; then
+          printf '::error::The preview could not be rendered (exit code %s).\n' "$rc"
+          exit 2
+        fi
+        if [[ $rc -eq 0 ]]; then valid=true; else valid=false; fi
+        printf 'valid=%s\n' "$valid" >> "$GITHUB_OUTPUT"
+
+    # The week on its own, not zipped, so the link downloads the SVG itself. Only a valid request has one.
+    - id: svg
+      if: steps.render.outputs.valid == 'true'
+      name: Upload the week as SVG
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        path: ${{ steps.setup.outputs.out-dir }}/schedule.svg
+        archive: false
+        if-no-files-found: error
+        retention-days: ${{ inputs.retention-days }}
+        overwrite: true
+
+    - id: files
+      name: Upload all files as one zip
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: canned-schedule
+        path: |
+          ${{ steps.setup.outputs.out-dir }}/report.json
+          ${{ steps.setup.outputs.out-dir }}/report.md
+          ${{ steps.setup.outputs.out-dir }}/schedule.json
+          ${{ steps.setup.outputs.out-dir }}/schedule.txt
+          ${{ steps.setup.outputs.out-dir }}/schedule.svg
+        if-no-files-found: error
+        retention-days: ${{ inputs.retention-days }}
+        overwrite: true
+
+    - name: Post or update the comment on the issue
+      shell: bash
+      working-directory: ${{ steps.setup.outputs.work-dir }}
+      env:
+        VERSION: ${{ inputs.version }}
+        ISSUE: ${{ inputs.issue }}
+        AUTHOR: ${{ inputs.comment-author }}
+        RETENTION_DAYS: ${{ inputs.retention-days }}
+        DRY_RUN: ${{ inputs.dry-run }}
+        OUT_DIR: ${{ steps.setup.outputs.out-dir }}
+        SVG_URL: ${{ steps.svg.outputs.artifact-url }}
+        FILES_URL: ${{ steps.files.outputs.artifact-url }}
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+        flags=(
+          --forge github
+          --repo "$GITHUB_REPOSITORY"
+          --issue "$ISSUE"
+          --api-url "$GITHUB_API_URL"
+          --author "$AUTHOR"
+          --note "kept for $RETENTION_DAYS days; downloading needs a GitHub login"
+        )
+        if [[ -n $SVG_URL ]]; then flags+=(--link "Week as SVG=$SVG_URL"); fi
+        flags+=(--link "All files=$FILES_URL")
+        if [[ $DRY_RUN == true ]]; then flags+=(--dry-run); fi
+        mise exec "github:iilei/canned-schedules-companion@$VERSION" -- canned-schedules-companion preview post \
+          "${flags[@]}" "$OUT_DIR"
+
+    - name: Fail when the request has errors
+      if: steps.render.outputs.valid == 'false'
+      shell: bash
+      run: |
+        printf '::error::The schedule request has errors. The comment on the issue lists them.\n'
+        exit 1

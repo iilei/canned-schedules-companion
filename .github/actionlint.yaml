@@ -1,0 +1,5 @@
+# Runner labels newer than the ones actionlint knows.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04
+    - ubuntu-26.04-arm

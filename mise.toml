@@ -8,6 +8,10 @@ rumdl = "0.3.0"
 goreleaser = "2.19.0"
 # SBOMs for the release archives (goreleaser's sboms step).
 syft = "1.55.0"
+# Checks the workflows, and action.yml where a workflow uses it.
+actionlint = "1.7.12"
+# actionlint checks the workflows' shell scripts with it.
+shellcheck = "0.11.0"
 
 [tasks.fmt]
 description = "Format Go code using the configured golangci-lint formatters"
@@ -37,6 +41,55 @@ run = "rumdl check ."
 description = "Fix Markdown style issues rumdl can fix"
 run = "rumdl fmt ."
 
+[tasks."lint:actions"]
+description = "Check the GitHub workflows with actionlint (.github/actionlint.yaml)"
+run = "actionlint"
+
+[tasks."action:assert"]
+description = "Check what the composite action left behind in CI: all files for a valid request, none of the schedule files for an invalid one"
+usage = '''
+arg "<valid_dir>" help="The out-dir of the run with a valid request"
+arg "<invalid_dir>" help="The out-dir of the run with an invalid request"
+arg "<valid_output>" help="The valid output of the run with a valid request"
+arg "<invalid_output>" help="The valid output of the run with an invalid request"
+arg "<invalid_outcome>" help="The outcome of the run with an invalid request"
+'''
+run = '''
+set -eu
+test "$usage_valid_output" = true
+test "$usage_invalid_output" = false
+test "$usage_invalid_outcome" = failure
+for f in comment.md report.json report.md schedule.json schedule.svg schedule.txt; do
+  test -s "$usage_valid_dir/$f" || { echo "missing: $f" >&2; exit 1; }
+done
+for f in comment.md report.json report.md; do
+  test -s "$usage_invalid_dir/$f" || { echo "missing: $f" >&2; exit 1; }
+done
+for f in schedule.json schedule.svg schedule.txt; do
+  if test -e "$usage_invalid_dir/$f"; then echo "unexpected: $f" >&2; exit 1; fi
+done
+for d in "$usage_valid_dir" "$usage_invalid_dir"; do
+  head -n 1 "$d/comment.md" | grep -qx '<!-- canned-schedules:issue-preview -->'
+done
+echo "the action's files are complete"
+'''
+
+[tasks."action:version"]
+description = "Check that action.yml installs the release it is tagged with"
+usage = '''
+arg "<tag>" help="The release tag, e.g. v1.2.3"
+'''
+run = '''
+set -eu
+have=$(awk '/^  version:/ { found = 1 } found && /default:/ { gsub(/"/, "", $2); print $2; exit }' action.yml)
+want=${usage_tag#v}
+if [ "$have" != "$want" ]; then
+  echo "action.yml installs $have, but the tag is $want: bump the default of its version input" >&2
+  exit 1
+fi
+echo "action.yml installs $have"
+'''
+
 [tasks.build]
 description = "Compile all packages, including the binary"
 run = "go build ./..."
@@ -47,7 +100,7 @@ run = "go mod tidy"
 
 [tasks.check]
 description = "Run all non-mutating quality checks"
-depends = ["fmt:check", "vet", "lint", "lint:md", "test", "build"]
+depends = ["fmt:check", "vet", "lint", "lint:md", "lint:actions", "test", "build"]
 
 [tasks.licenses]
 description = "Write THIRD_PARTY_LICENSES.md: the licences of everything compiled or embedded into the binary"

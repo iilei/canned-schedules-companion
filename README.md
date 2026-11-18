@@ -4,7 +4,8 @@ The lifecycle around [canned-schedules](https://github.com/iilei/canned-schedule
 issue written from the template) into feedback on that issue, and later moves approved requests to the catalog
 ("shelf"), publishes them and keeps them tidy.
 
-**Work in progress.** Step 1, issue feedback: `preview render` (local) and `preview post --forge github`.
+**Work in progress.** Step 1, issue feedback: `preview render` (local), `preview post --forge github` and a GitHub
+Action that runs both.
 
 ## Design
 
@@ -106,6 +107,62 @@ A comment longer than GitHub's 65,536 characters becomes a short notice plus the
 GITHUB_TOKEN=$(gh auth token) canned-schedules-companion preview post --forge github \
   --repo you/catalog --issue 12 --author you --dry-run canned-schedule-preview
 ```
+
+## GitHub Action
+
+The action at the root of this repository checks a schedule request issue and keeps one comment on it up to date. It
+installs a signed release, runs `preview render`, uploads the files as workflow artifacts and runs `preview post`. A
+request with errors still gets its comment; the job fails afterwards. It is tested on Linux runners and is available
+from the first release after `v0.1.0`.
+
+```yaml
+name: schedule request
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: schedule-request-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    if: contains(github.event.issue.labels.*.name, 'Schedule')
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      # The body is untrusted: it reaches the shell only through an environment variable and a file.
+      - name: Write the issue body to a file
+        env:
+          BODY: ${{ github.event.issue.body }}
+        run: printf '%s' "$BODY" > "$RUNNER_TEMP/request.md"
+
+      - uses: iilei/canned-schedules-companion@<commit SHA> # <release tag>
+        with:
+          body-file: ${{ runner.temp }}/request.md
+```
+
+| Input                  | Meaning                                                                                 | Default               |
+| ---------------------- | --------------------------------------------------------------------------------------- | --------------------- |
+| `body-file`            | the issue body as a file (required)                                                     |                       |
+| `version`              | the release to install                                                                  | this action's release |
+| `issue`                | the issue to comment on                                                                 | the triggering issue  |
+| `out-dir`              | where the files go                                                                      | a temporary directory |
+| `args`                 | evaluation flags, one argument per line, as in `canned-schedules.args`                  |                       |
+| `fiddle-link-base-uri` | a preflight page you host, linked from the comment                                      | no link               |
+| `retention-days`       | how many days the uploaded files are kept                                               | `30`                  |
+| `token`                | reads and writes the issue's comments                                                   | `github.token`        |
+| `comment-author`       | the login behind `token`                                                                | `github-actions[bot]` |
+| `dry-run`              | `true` writes no comment but says what would change; the files are still uploaded       | `false`               |
+
+Outputs: `valid` (`true` or `false`), `out-dir`, `svg-url` (valid requests only) and `files-url`.
 
 ## Development
 
