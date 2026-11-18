@@ -1,0 +1,179 @@
+# Checks a schedule request issue and keeps one note on it up to date, with the week shown inline.
+#
+# GitLab can't start a pipeline from an issue event by itself: an issue webhook calls a pipeline trigger URL, and this
+# job reads the event from TRIGGER_PAYLOAD. The README lists the setup. The job needs the CI/CD variable
+# CANNED_SCHEDULES_TOKEN: a project access token with the api scope and the Planner role.
+spec:
+  description: Checks schedule request issues and keeps one note on each up to date.
+  inputs:
+    stage:
+      description: The stage of the job.
+      default: test
+    version:
+      description: The canned-schedules-companion release to install.
+      default: "0.1.1"
+      regex: ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$
+    image:
+      description: The job's image. An image that already contains the binary, curl and jq skips the download.
+      default: alpine:3.22
+    label:
+      description: Only issues with this label are checked. Empty means every issue.
+      default: Schedule
+    api-url:
+      description: The REST API as a job reaches it.
+      default: $CI_API_V4_URL
+    args:
+      description: Evaluation flags, one argument per line, as in canned-schedules.args.
+      default: ""
+    fiddle-link-base-uri:
+      description: A preflight page you host. The note then links to it with the schedule in the URL fragment.
+      default: ""
+    expire-in:
+      description: How long the job's files are kept.
+      default: 30 days
+    dry-run:
+      description: Reads the issue's notes and says what would change, but writes nothing.
+      type: boolean
+      default: false
+---
+canned-schedule-preview:
+  stage: $[[ inputs.stage ]]
+  image: $[[ inputs.image ]]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "trigger" && $TRIGGER_PAYLOAD
+  # One job at a time: concurrent runs would each create a note.
+  resource_group: canned-schedule-preview
+  variables:
+    # The job runs nothing from the repository.
+    GIT_STRATEGY: none
+    CS_VERSION: $[[ inputs.version ]]
+    CS_LABEL: $[[ inputs.label ]]
+    CS_API_URL: $[[ inputs.api-url ]]
+    CS_DRY_RUN: $[[ inputs.dry-run ]]
+    CS_ARGS:
+      value: $[[ inputs.args ]]
+      expand: false
+    CS_FIDDLE_LINK_BASE_URI:
+      value: $[[ inputs.fiddle-link-base-uri ]]
+      expand: false
+    # canned-schedules' release key, the only one that may sign the download.
+    CS_RELEASE_KEY: B645234C9CB8175ECA5D78A5C8447A2252E9E7B6
+  script:
+    - |
+      set -eu
+
+      fail() {
+        printf 'canned-schedule-preview: %s\n' "$1" >&2
+        exit 2
+      }
+
+      [ -n "${CANNED_SCHEDULES_TOKEN:-}" ] || fail 'set the CI/CD variable CANNED_SCHEDULES_TOKEN'
+
+      # The event names the issue. Everything else is read from the API, so a forged payload can't supply the text.
+      if ! command -v curl >/dev/null || ! command -v jq >/dev/null; then
+        apk add --no-cache --quiet curl jq
+      fi
+
+      kind=$(jq -r '.object_kind // ""' "$TRIGGER_PAYLOAD")
+      action=$(jq -r '.object_attributes.action // ""' "$TRIGGER_PAYLOAD")
+      iid=$(jq -r '.object_attributes.iid // ""' "$TRIGGER_PAYLOAD")
+
+      case $kind:$action in
+        issue:open | issue:reopen) ;;
+        issue:update)
+          # Closing an issue or assigning someone is an update too, but only these two can change the result.
+          if ! jq -e '(.changes // {}) | has("description") or has("labels")' "$TRIGGER_PAYLOAD" >/dev/null; then
+            echo "Nothing to do for this event."
+            exit 0
+          fi
+          ;;
+        *)
+          echo "Nothing to do for this event."
+          exit 0
+          ;;
+      esac
+
+      case $iid in
+        '' | *[!0-9]*) fail 'the event names no issue' ;;
+      esac
+
+      api_get() {
+        printf 'header = "PRIVATE-TOKEN: %s"\n' "$CANNED_SCHEDULES_TOKEN" |
+          curl --config - --fail --silent --show-error --max-time 30 "$CS_API_URL/projects/$CI_PROJECT_ID/issues/$iid"
+      }
+
+      work_dir=$(mktemp -d)
+      api_get > "$work_dir/issue.json"
+
+      if [ -n "$CS_LABEL" ] &&
+        ! jq -e --arg label "$CS_LABEL" 'any(.labels[]?; . == $label)' "$work_dir/issue.json" >/dev/null; then
+        echo "Issue $iid doesn't have the label, so there is nothing to do."
+        exit 0
+      fi
+
+      jq -j '.description // ""' "$work_dir/issue.json" > "$work_dir/request.md"
+
+      if ! command -v canned-schedules-companion >/dev/null; then
+        command -v gpg >/dev/null || apk add --no-cache --quiet gnupg
+
+        case $(uname -m) in
+          x86_64) arch=x86_64 ;;
+          aarch64) arch=arm64 ;;
+          armv7l) arch=armv7 ;;
+          *) fail "no release for $(uname -m)" ;;
+        esac
+
+        archive=canned-schedules-companion_${CS_VERSION}_linux_${arch}.tar.gz
+        release=https://github.com/iilei/canned-schedules-companion/releases/download/v$CS_VERSION
+        bin_dir=$(mktemp -d)
+
+        for file in "$archive" checksums.txt checksums.txt.sig release-key.asc; do
+          curl --fail --silent --show-error --location --max-time 120 --output "$bin_dir/$file" "$release/$file"
+        done
+
+        GNUPGHOME=$(mktemp -d)
+        export GNUPGHOME
+        gpg --batch --quiet --import "$bin_dir/release-key.asc"
+        gpg --batch --status-fd 1 --verify "$bin_dir/checksums.txt.sig" "$bin_dir/checksums.txt" 2>/dev/null |
+          grep -q "^\[GNUPG:\] VALIDSIG .* $CS_RELEASE_KEY\$" || fail 'the release signature is not valid'
+        (cd "$bin_dir" && awk -v f="$archive" '$2 == f' checksums.txt | sha256sum -c -s -) ||
+          fail 'the download does not match checksums.txt'
+
+        tar -xzf "$bin_dir/$archive" -C "$bin_dir" canned-schedules-companion
+        PATH=$bin_dir:$PATH
+      fi
+
+      # One argument per line; the flags below come last, so they win.
+      set --
+      while IFS= read -r line || [ -n "$line" ]; do
+        line=${line%"$(printf '\r')"}
+        case $line in '' | '#'*) continue ;; esac
+        set -- "$@" "$line"
+      done <<CS_ARGS_END
+      $CS_ARGS
+      CS_ARGS_END
+
+      if [ -n "$CS_FIDDLE_LINK_BASE_URI" ]; then
+        set -- "$@" --fiddle-link-base-uri "$CS_FIDDLE_LINK_BASE_URI"
+      fi
+
+      out_dir=$CI_PROJECT_DIR/canned-schedule-preview
+      rc=0
+      (cd "$work_dir" && canned-schedules-companion preview render "$@" --out-dir "$out_dir" request.md) || rc=$?
+      [ "$rc" -le 1 ] || exit "$rc"
+
+      set -- --forge gitlab --repo "$CI_PROJECT_ID" --issue "$iid" --api-url "$CS_API_URL" \
+        --token-env CANNED_SCHEDULES_TOKEN
+      case $CI_JOB_URL in
+        https://*) set -- "$@" --link "All files=$CI_JOB_URL/artifacts/browse" ;;
+      esac
+      if [ "$CS_DRY_RUN" = true ]; then set -- "$@" --dry-run; fi
+      canned-schedules-companion preview post "$@" "$out_dir"
+
+      # The note lists the errors; the failed job makes them visible in the pipeline too.
+      exit "$rc"
+  artifacts:
+    when: always
+    expire_in: $[[ inputs.expire-in ]]
+    paths:
+      - canned-schedule-preview/

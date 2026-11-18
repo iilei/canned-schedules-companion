@@ -146,9 +146,9 @@ func postGitLab(ctx context.Context, f *postFlags, dir string, raw []byte, token
 	switch {
 	case svg == nil:
 	case f.dryRun:
-		fmt.Fprintf(stdout, "would upload %s to %s\n", preview.ScheduleSVG, f.repo)
+		fmt.Fprintf(stdout, "would upload %s to %s\n", preview.UploadName(f.issue, svg), f.repo)
 	default:
-		if image, err = c.Upload(ctx, f.repo, preview.ScheduleSVG, svg); err != nil {
+		if image, err = c.Upload(ctx, f.repo, preview.UploadName(f.issue, svg), svg); err != nil {
 			return nil, err
 		}
 	}

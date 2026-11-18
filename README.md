@@ -91,14 +91,14 @@ issue's comments, takes those that start with the marker **and** were written by
 `github-actions[bot]`, the workflow token's account), updates the oldest and deletes the others; with none, it
 creates the comment. A marker someone pasted into their own comment is never touched.
 
-| Flag               | Meaning                                                                         |
-| ------------------ | ------------------------------------------------------------------------------- |
-| `--link label=URL` | a link under the comment, e.g. to an uploaded artifact (repeatable, https only) |
-| `--note text`      | text in parentheses after the links                                             |
-| `--author login`   | whose comments count as the step's own (locally: your login)                    |
-| `--token-env NAME` | the variable holding the token (default `GITHUB_TOKEN` or `GITLAB_TOKEN`)       |
-| `--api-url URL`    | the REST API, for self-hosted forges (default: github.com's or gitlab.com's)    |
-| `--dry-run`        | read the comments and say what would change, but write nothing                  |
+| Flag                        | Meaning                                                                         |
+| --------------------------- | ------------------------------------------------------------------------------- |
+| `--link label=URL`          | a link under the comment, e.g. to an uploaded artifact (repeatable, https only) |
+| `--note text`               | text in parentheses after the links                                             |
+| `--author login`            | whose comments count as the step's own (locally: your login)                    |
+| `--token-env NAME`          | the variable holding the token (default `GITHUB_TOKEN` or `GITLAB_TOKEN`)       |
+| `--api-url URL`             | the REST API, for self-hosted forges (default: github.com's or gitlab.com's)    |
+| `--dry-run`                 | read the comments and say what would change, but write nothing                  |
 
 A comment longer than GitHub's 65,536 characters becomes a short notice plus the links. The token needs only the
 `issues: write` permission. Locally:
@@ -110,8 +110,9 @@ GITHUB_TOKEN=$(gh auth token) canned-schedules-companion preview post --forge gi
 
 ### On GitLab
 
-`--forge gitlab` keeps one note per issue the same way, and also uploads `schedule.svg` to the project and shows the
-week inline in the note. `--repo` is the project's path (`group/subgroup/project`) or numeric ID. Comments count as the
+`--forge gitlab` keeps one note per issue the same way, and also uploads the week to the project and shows it inline in
+the note. The upload is named `schedule-<issue>-<hash>.svg`, with the first 12 characters of the SVG's SHA-256, so
+another job can tell which week a note shows. `--repo` is the project's path (`group/subgroup/project`) or numeric ID. Comments count as the
 step's own when the token's user wrote them, unless `--author` says otherwise.
 
 Use a project access token with the `api` scope and the **Planner** role. Guest also works, except on confidential
@@ -122,6 +123,48 @@ files. Every update uploads the week again, and earlier uploads stay in the proj
 GITLAB_TOKEN=glpat-… canned-schedules-companion preview post --forge gitlab \
   --repo group/catalog --issue 12 --api-url https://gitlab.example.com/api/v4 --dry-run canned-schedule-preview
 ```
+
+## GitLab CI/CD component
+
+`templates/issue-preview.yml` checks a schedule request issue and keeps one note on it up to date, with the week shown
+inline. GitLab can't start a pipeline from an issue event by itself, so a webhook calls a pipeline trigger. The
+component isn't in the public CI/CD catalog yet: keep a copy of the file in a GitLab project of your own, under
+`templates/`, and include it from there. It needs `--forge gitlab`, so use `v0.1.1` or later.
+
+1. **Create a project access token** in the project that holds the issues, with the `api` scope and the Planner role.
+2. **Store it** as the CI/CD variable `CANNED_SCHEDULES_TOKEN`, masked. Before it expires, **rotate** it and store the
+   new value. Rotation keeps the token's bot user, so the bot goes on updating its notes. A newly created token is a
+   new user: it can't edit the old bot's notes, so each issue would get a second note.
+3. **Create a pipeline trigger token** under Settings > CI/CD > Pipeline trigger tokens.
+4. **Add a webhook** under Settings > Webhooks, with **Issues events** (and **Confidential issues events** if you use
+   them) and this URL:
+
+   ```text
+   https://gitlab.example.com/api/v4/projects/<project ID>/ref/<default branch>/trigger/pipeline?token=<trigger token>
+   ```
+
+5. **Include the component** in the project's `.gitlab-ci.yml`:
+
+   ```yaml
+   include:
+     - component: $CI_SERVER_FQDN/<group>/<component project>/issue-preview@<ref>
+   ```
+
+The job runs when an issue with the `Schedule` label is opened or reopened, and when its description or labels change.
+It reads the text from the API, not from the event. A request with errors gets its note, and the job then fails. The
+job keeps its files as artifacts under `canned-schedule-preview/`, for further jobs of your own.
+
+| Input                  | Meaning                                                                          | Default          |
+| ---------------------- | -------------------------------------------------------------------------------- | ---------------- |
+| `stage`                | the job's stage                                                                  | `test`           |
+| `version`              | the release to install; its signature and checksum are verified                  | this file's      |
+| `image`                | the job's image; one with the binary, `curl` and `jq` skips the download         | `alpine:3.22`    |
+| `label`                | only issues with this label are checked; empty means every issue                 | `Schedule`       |
+| `api-url`              | the REST API as a job reaches it                                                 | `$CI_API_V4_URL` |
+| `args`                 | evaluation flags, one argument per line, as in `canned-schedules.args`           |                  |
+| `fiddle-link-base-uri` | a preflight page you host, linked from the note                                  | no link          |
+| `expire-in`            | how long the job's files are kept                                                | `30 days`        |
+| `dry-run`              | says what would change, but writes nothing                                       | `false`          |
 
 ## GitHub Action
 

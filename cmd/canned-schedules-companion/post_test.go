@@ -85,7 +85,10 @@ func TestPreviewPost(t *testing.T) {
 func TestPreviewPostGitLab(t *testing.T) {
 	t.Setenv("GITLAB_TOKEN", "secret")
 
-	var uploads int
+	var (
+		uploads  int
+		uploaded string
+	)
 
 	var notes []string
 
@@ -99,6 +102,10 @@ func TestPreviewPostGitLab(t *testing.T) {
 			_, _ = w.Write([]byte(`{"username": "project_1_bot"}`))
 		case path == "/projects/group%2Fcatalog/uploads":
 			uploads++
+
+			if _, head, err := r.FormFile("file"); err == nil {
+				uploaded = head.Filename
+			}
 
 			_, _ = w.Write([]byte(`{"url": "/uploads/abc/schedule.svg"}`))
 		case path == "/projects/group%2Fcatalog/issues/7":
@@ -149,7 +156,7 @@ func TestPreviewPostGitLab(t *testing.T) {
 		t.Fatalf("dry run: exit %d: %s", code, stderr.String())
 	}
 
-	if !strings.HasPrefix(stdout.String(), "would upload schedule.svg to group/catalog\n") || uploads != 0 ||
+	if !strings.HasPrefix(stdout.String(), "would upload schedule-7-") || uploads != 0 ||
 		len(notes) != 0 {
 		t.Errorf("dry run: %q, %d uploads, %d notes", stdout.String(), uploads, len(notes))
 	}
@@ -158,6 +165,10 @@ func TestPreviewPostGitLab(t *testing.T) {
 
 	if code := run(append(post, valid), &stdout, &stderr); code != exitOK {
 		t.Fatalf("post: exit %d: %s", code, stderr.String())
+	}
+
+	if !strings.HasPrefix(uploaded, "schedule-7-") || !strings.HasSuffix(uploaded, ".svg") {
+		t.Errorf("uploaded as %q", uploaded)
 	}
 
 	if uploads != 1 || len(notes) != 1 ||
