@@ -4,7 +4,7 @@
 // Usage:
 //
 //	canned-schedules-companion preview render [flags] request.md
-//	canned-schedules-companion preview post --forge github --repo OWNER/REPO --issue N [flags] dir
+//	canned-schedules-companion preview post --forge github|gitlab --repo OWNER/REPO --issue N [flags] dir
 //
 // Every step splits into local verbs (render, prepare, check), which read and write files only, and forge verbs
 // (post, open, publish, retire), which write to GitHub or GitLab, support --dry-run and take the forge explicitly.
@@ -47,7 +47,7 @@ const (
 )
 
 const usage = `usage: canned-schedules-companion preview render [flags] request.md
-       canned-schedules-companion preview post --forge github --repo OWNER/REPO --issue N [flags] dir
+       canned-schedules-companion preview post --forge github|gitlab --repo OWNER/REPO --issue N [flags] dir
        canned-schedules-companion --version
 `
 

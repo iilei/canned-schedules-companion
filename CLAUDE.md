@@ -38,6 +38,19 @@ talks to a forge lives here.
   text) and `--note`; over GitHub's 65,536 characters it falls back to the marker, a short notice and the links.
   Exit 2 for API failures, like any unusable environment. Tested against a fake API (`httptest`); a dry run against
   the real one read core issue #38.
+- **`preview post --forge gitlab` (implemented 2026-11-18):** `internal/forge/gitlab` with plain `net/http`, the same
+  upsert as GitHub (`internal/forge` holds the shared `Plan` and `Upsert`): oldest marked note by the author updated,
+  others deleted, system notes ignored. `--repo` is the project path or numeric ID. `--author` defaults to the
+  token's user (`GET /user`), since project access tokens have generated names; `--token-env` to `GITLAB_TOKEN`.
+  `schedule.svg` goes through the uploads API and shows inline (`preview.GitLabBody`; a note is limited to 1 MiB in
+  bytes, GitHub counts characters); a dry run uploads nothing.
+  The token never follows a redirect, because Go keeps `PRIVATE-TOKEN` across hosts. Tested against a fake API and
+  live against GitLab CE 19.4.1 (2026-11-18, with a root token): create, update, duplicate removal, the upload byte for
+  byte and shown in the browser, and quick actions (`/close`, `/title`, …) inside the comment's tilde fences stay inert, while the same lines
+  outside a fence do fire. So user text must only ever reach a note inside a fence.
+  **Token: a project access token with `api` and the Planner role** (tested Guest to Maintainer): Guest gets a 404 on
+  confidential issues, every role can post on locked and closed issues, and `read_api` only allows `--dry-run`. A
+  new project access token can answer 404 for a few seconds, until GitLab has applied its membership.
 - **Playground link, opt-in only (decided 2026-11-08):** previews are CI's job, so nobody has to wonder where a
   request's data lands; the public Pages site is never linked by default. A team that hosts the preflight page
   itself opts in with `preview render --fiddle-link-base-uri <https URI>`: `comment.md` then ends with
@@ -102,8 +115,9 @@ talks to a forge lives here.
 In this order (agreed 2026-11-08: the action installs a signed release, not a build from its checkout; reordered
 2026-11-18: GitLab right after the action, before the core's example and the demo repo).
 
-1. **GitLab:** `preview post --forge gitlab` (uploads API, notes), the CI/CD component in a GitLab project. The
-   maintainer has a working Docker setup for a local GitLab to test against.
+1. **GitLab:** the CI/CD component in a GitLab project, tested on the local GitLab (`../hatchet_gitlab_demo`,
+   `docker compose up -d gitlab gitlab-runner`). Run one job per issue at a time (`resource_group`):
+   concurrent runs each create a note, and only the next run removes the duplicates.
 2. **The core's `examples/consumer`** calls the action instead of its `gh api` steps; `schedule:check` either stays
    as the local task or calls this binary. Pin bump in the core in the same PR, as for core releases.
 3. **The demo repo** `canned-schedules-demo` (public), set up from the example, for the screen recording.
@@ -113,5 +127,7 @@ In this order (agreed 2026-11-08: the action installs a signed release, not a bu
 - `action.yml`: the composite GitHub Action (step 1).
 - `cmd/canned-schedules-companion`: the binary, flag parsing, input reading, atomic writes, exit codes.
 - `internal/preview`: step 1's local part (`Render`, `Body`, `ParseLink`, `ParseFiddleBase`, `FiddleLink`), pure.
+- `internal/forge`: what the forge clients share.
 - `internal/forge/github`: the only code that talks to GitHub.
+- `internal/forge/gitlab`: the only code that talks to GitLab.
 - `testdata/`: request inputs (`office-hours.md` is the core's GitLab issue template).

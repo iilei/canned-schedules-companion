@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/iilei/canned-schedules-companion/internal/forge"
 )
 
 // DefaultAPIURL is github.com's REST API. GitHub Enterprise Server has its own (the action passes github.api_url).
@@ -32,8 +34,8 @@ const (
 
 // Actions that UpsertComment takes.
 const (
-	ActionCreate = "create"
-	ActionUpdate = "update"
+	ActionCreate = forge.ActionCreate
+	ActionUpdate = forge.ActionUpdate
 )
 
 var errRepo = errors.New("want OWNER/REPO")
@@ -47,32 +49,10 @@ type Client struct {
 }
 
 // Plan is what UpsertComment did, or would do with DryRun.
-type Plan struct {
-	// Action is ActionCreate or ActionUpdate.
-	Action string
-	// URL is the comment's page; empty for a create in a dry run.
-	URL string
-	// Delete lists further marked comments by the author, removed as duplicates.
-	Delete []int64
-	// Update is the comment updated (0 for a create).
-	Update int64
-}
+type Plan = forge.Plan
 
 // Upsert describes one comment to keep up to date.
-type Upsert struct {
-	// Repo is OWNER/REPO.
-	Repo string
-	// Marker starts the comment; only comments that start with it count.
-	Marker string
-	// Author is the login whose comments count, so a pasted marker by someone else is never touched.
-	Author string
-	// Body is the full comment, marker included.
-	Body string
-	// Issue is the issue (or pull request) number.
-	Issue int
-	// DryRun reads but never writes.
-	DryRun bool
-}
+type Upsert = forge.Upsert
 
 type comment struct {
 	User struct {

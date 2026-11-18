@@ -4,8 +4,8 @@ The lifecycle around [canned-schedules](https://github.com/iilei/canned-schedule
 issue written from the template) into feedback on that issue, and later moves approved requests to the catalog
 ("shelf"), publishes them and keeps them tidy.
 
-**Work in progress.** Step 1, issue feedback: `preview render` (local), `preview post --forge github` and a GitHub
-Action that runs both.
+**Work in progress.** Step 1, issue feedback: `preview render` (local), `preview post --forge github|gitlab` and a
+GitHub Action that runs both.
 
 ## Design
 
@@ -21,7 +21,7 @@ Action that runs both.
   | housekeeping  | `housekeep check`  | `housekeep retire`   |
 
   `preview render` and `preview post` exist so far. Forge verbs support `--dry-run` and take the forge explicitly
-  (`--forge github`; `gitlab` comes later).
+  (`--forge github` or `--forge gitlab`).
 - **Built on the canned-schedules Go library** (`github.com/iilei/canned-schedules`), pinned in `go.mod`. Its
   results are the CLI's results, byte for byte.
 
@@ -83,7 +83,7 @@ Exit codes: 0 valid, 1 the request has errors (the files are still written), 2 u
 ## preview post
 
 ```sh
-canned-schedules-companion preview post --forge github --repo OWNER/REPO --issue N [flags] dir
+canned-schedules-companion preview post --forge github|gitlab --repo OWNER/REPO --issue N [flags] dir
 ```
 
 Posts `dir/comment.md` (written by `preview render`) to the issue, keeping **one comment per issue**: it lists the
@@ -96,8 +96,8 @@ creates the comment. A marker someone pasted into their own comment is never tou
 | `--link label=URL` | a link under the comment, e.g. to an uploaded artifact (repeatable, https only) |
 | `--note text`      | text in parentheses after the links                                             |
 | `--author login`   | whose comments count as the step's own (locally: your login)                    |
-| `--token-env NAME` | the variable holding the token (default `GITHUB_TOKEN`)                         |
-| `--api-url URL`    | the REST API, for GitHub Enterprise Server (default `https://api.github.com`)   |
+| `--token-env NAME` | the variable holding the token (default `GITHUB_TOKEN` or `GITLAB_TOKEN`)       |
+| `--api-url URL`    | the REST API, for self-hosted forges (default: github.com's or gitlab.com's)    |
 | `--dry-run`        | read the comments and say what would change, but write nothing                  |
 
 A comment longer than GitHub's 65,536 characters becomes a short notice plus the links. The token needs only the
@@ -106,6 +106,21 @@ A comment longer than GitHub's 65,536 characters becomes a short notice plus the
 ```sh
 GITHUB_TOKEN=$(gh auth token) canned-schedules-companion preview post --forge github \
   --repo you/catalog --issue 12 --author you --dry-run canned-schedule-preview
+```
+
+### On GitLab
+
+`--forge gitlab` keeps one note per issue the same way, and also uploads `schedule.svg` to the project and shows the
+week inline in the note. `--repo` is the project's path (`group/subgroup/project`) or numeric ID. Comments count as the
+step's own when the token's user wrote them, unless `--author` says otherwise.
+
+Use a project access token with the `api` scope and the **Planner** role. Guest also works, except on confidential
+issues, which it can't see. With `read_api`, only `--dry-run` works. `CI_JOB_TOKEN` can neither write notes nor upload
+files. Every update uploads the week again, and earlier uploads stay in the project.
+
+```sh
+GITLAB_TOKEN=glpat-… canned-schedules-companion preview post --forge gitlab \
+  --repo group/catalog --issue 12 --api-url https://gitlab.example.com/api/v4 --dry-run canned-schedule-preview
 ```
 
 ## GitHub Action

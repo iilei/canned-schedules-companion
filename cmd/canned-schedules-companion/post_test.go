@@ -80,6 +80,109 @@ func TestPreviewPost(t *testing.T) {
 	}
 }
 
+// TestPreviewPostGitLab posts a valid request to a fake GitLab: the week is uploaded and shown in the note, and the
+// note's author comes from the token. A dry run uploads nothing, and an invalid request has no week to upload.
+func TestPreviewPostGitLab(t *testing.T) {
+	t.Setenv("GITLAB_TOKEN", "secret")
+
+	var uploads int
+
+	var notes []string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.EscapedPath()
+
+		switch {
+		case r.Header.Get("PRIVATE-TOKEN") != "secret":
+			w.WriteHeader(http.StatusUnauthorized)
+		case path == "/user":
+			_, _ = w.Write([]byte(`{"username": "project_1_bot"}`))
+		case path == "/projects/group%2Fcatalog/uploads":
+			uploads++
+
+			_, _ = w.Write([]byte(`{"url": "/uploads/abc/schedule.svg"}`))
+		case path == "/projects/group%2Fcatalog/issues/7":
+			_, _ = w.Write([]byte(`{"web_url": "https://gitlab.example/group/catalog/-/issues/7"}`))
+		case r.Method == http.MethodPost:
+			var in struct {
+				Body string `json:"body"`
+			}
+
+			_ = json.NewDecoder(r.Body).Decode(&in)
+			notes = append(notes, in.Body)
+			_, _ = w.Write([]byte(`{"id": 5}`))
+		default:
+			_, _ = w.Write([]byte("[]"))
+		}
+	}))
+	defer srv.Close()
+
+	render := func(file string, want int) string {
+		t.Helper()
+
+		out := t.TempDir()
+
+		var stdout, stderr bytes.Buffer
+		if code := run([]string{"preview", "render", "--out-dir", out, file}, &stdout, &stderr); code != want {
+			t.Fatalf("render %s: exit %d: %s", file, code, stderr.String())
+		}
+
+		return out
+	}
+
+	post := []string{
+		"preview",
+		"post",
+		"--forge",
+		"gitlab",
+		"--repo",
+		"group/catalog",
+		"--issue",
+		"7",
+		"--api-url",
+		srv.URL,
+	}
+	valid := render("../../testdata/office-hours.md", exitOK)
+
+	var stdout, stderr bytes.Buffer
+	if code := run(append(post, "--dry-run", valid), &stdout, &stderr); code != exitOK {
+		t.Fatalf("dry run: exit %d: %s", code, stderr.String())
+	}
+
+	if !strings.HasPrefix(stdout.String(), "would upload schedule.svg to group/catalog\n") || uploads != 0 ||
+		len(notes) != 0 {
+		t.Errorf("dry run: %q, %d uploads, %d notes", stdout.String(), uploads, len(notes))
+	}
+
+	stdout.Reset()
+
+	if code := run(append(post, valid), &stdout, &stderr); code != exitOK {
+		t.Fatalf("post: exit %d: %s", code, stderr.String())
+	}
+
+	if uploads != 1 || len(notes) != 1 ||
+		!strings.HasSuffix(notes[0], "\n![Week as SVG](/uploads/abc/schedule.svg)\n") {
+		t.Fatalf("%d uploads, notes %q", uploads, notes)
+	}
+
+	if !strings.Contains(
+		stdout.String(),
+		"created a comment on group/catalog#7 https://gitlab.example/group/catalog/-/issues/7#note_5",
+	) {
+		t.Errorf("stdout %q", stdout.String())
+	}
+
+	invalid := render("../../testdata/invalid-name.md", exitInvalid)
+
+	if code := run(append(post, invalid), &stdout, &stderr); code != exitOK {
+		t.Fatalf("post invalid: exit %d: %s", code, stderr.String())
+	}
+
+	if uploads != 1 || len(notes) != 2 || strings.Contains(notes[1], "![") {
+		t.Errorf("invalid: %d uploads, notes %q", uploads, notes)
+	}
+}
+
 func TestPreviewPostUsage(t *testing.T) {
 	t.Setenv("TEST_COMPANION_EMPTY", "")
 
@@ -87,16 +190,17 @@ func TestPreviewPostUsage(t *testing.T) {
 	base := []string{"preview", "post", "--repo", "o/r", "--issue", "7"}
 
 	for name, args := range map[string][]string{
-		"no forge":         append(base, dir),
-		"gitlab":           append(base, "--forge", "gitlab", dir),
-		"no repo":          {"preview", "post", "--forge", "github", "--issue", "7", dir},
-		"no dir":           append(base, "--forge", "github"),
-		"bad link":         append(base, "--forge", "github", "--link", "x=http://insecure", dir),
-		"no comment.md":    append(base, "--forge", "github", dir),
-		"empty token":      append(base, "--forge", "github", "--token-env", "TEST_COMPANION_EMPTY", dir),
-		"empty author":     append(base, "--forge", "github", "--author", " ", dir),
-		"negative issue":   {"preview", "post", "--forge", "github", "--repo", "o/r", "--issue", "-1", dir},
-		"unknown argument": append(base, "--forge", "github", "--colour", dir),
+		"no forge":          append(base, dir),
+		"unknown forge":     append(base, "--forge", "forgejo", dir),
+		"gitlab no comment": append(base, "--forge", "gitlab", dir),
+		"no repo":           {"preview", "post", "--forge", "github", "--issue", "7", dir},
+		"no dir":            append(base, "--forge", "github"),
+		"bad link":          append(base, "--forge", "github", "--link", "x=http://insecure", dir),
+		"no comment.md":     append(base, "--forge", "github", dir),
+		"empty token":       append(base, "--forge", "github", "--token-env", "TEST_COMPANION_EMPTY", dir),
+		"empty author":      append(base, "--forge", "github", "--author", " ", dir),
+		"negative issue":    {"preview", "post", "--forge", "github", "--repo", "o/r", "--issue", "-1", dir},
+		"unknown argument":  append(base, "--forge", "github", "--colour", dir),
 	} {
 		var stdout, stderr bytes.Buffer
 		if code := run(args, &stdout, &stderr); code != exitUsage {
