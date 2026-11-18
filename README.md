@@ -222,6 +222,58 @@ jobs:
 
 Outputs: `valid` (`true` or `false`), `out-dir`, `svg-url` (valid requests only) and `files-url`.
 
+## The week as a PNG
+
+`preview render` writes the week as `schedule.svg`. To use it outside the forge, for example on a slide or in a chat
+message, convert it with `rsvg-convert`. Both recipes expect `schedule.svg` in the current folder and the `.ttf` files of
+Ubuntu Mono, the SVG's first choice of font, in `./fonts`. WOFF2 files don't work: the text goes missing. Keep
+`ttf-dejavu` installed, because Ubuntu Mono has no `→` for the transition table.
+
+<details>
+<summary>Nonroot Wolfi image: build it once, then render without network access</summary>
+
+```dockerfile
+# Tested with cgr.dev/chainguard/wolfi-base@sha256:580c9ae79c0229cc381475fbfbed0d91fab5d6606e57cd78732f9836de109e90
+FROM cgr.dev/chainguard/wolfi-base
+RUN apk add --no-cache rsvg-convert fontconfig ttf-dejavu
+USER 65532:65532
+ENTRYPOINT ["rsvg-convert"]
+```
+
+```sh
+docker build -t schedule-png .
+
+docker run --rm --network none --read-only --tmpfs /tmp \
+  --cap-drop ALL --security-opt no-new-privileges \
+  --user "$(id -u):$(id -g)" -e HOME=/tmp \
+  -v "$PWD:/work" \
+  -v "$PWD/fonts:/usr/share/fonts/custom:ro" \
+  schedule-png --zoom 2 --background-color white \
+  --output /work/schedule.png /work/schedule.svg
+```
+
+The PNG belongs to your own user.
+
+</details>
+
+<details>
+<summary>Alpine one-off: nothing to build, but it runs as root</summary>
+
+```sh
+docker run --rm \
+  -v "$PWD:/work" \
+  -v "$PWD/fonts:/usr/share/fonts/custom:ro" \
+  alpine:3.22 sh -c '
+    apk add --no-cache --quiet rsvg-convert fontconfig ttf-dejavu
+    rsvg-convert --zoom 2 --background-color white \
+      --output /work/schedule.png /work/schedule.svg
+  '
+```
+
+The PNG belongs to `root`.
+
+</details>
+
 ## Development
 
 ```sh

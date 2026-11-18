@@ -6,6 +6,10 @@ extend-enable = ["MD060", "MD001", "MD003", "MD022", "MD025", "MD032"]
 [MD013]
 line-length = 227
 
+# Collapsible sections in the README.
+[MD033]
+allowed-elements = ["details", "summary"]
+
 [MD060]
 enabled = true
 style = "aligned"
