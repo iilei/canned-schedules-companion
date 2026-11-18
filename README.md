@@ -225,9 +225,16 @@ Outputs: `valid` (`true` or `false`), `out-dir`, `svg-url` (valid requests only)
 ## The week as a PNG
 
 `preview render` writes the week as `schedule.svg`. To use it outside the forge, for example on a slide or in a chat
-message, convert it with `rsvg-convert`. Both recipes expect `schedule.svg` in the current folder and the `.ttf` files of
-Ubuntu Mono, the SVG's first choice of font, in `./fonts`. WOFF2 files don't work: the text goes missing. Keep
-`ttf-dejavu` installed, because Ubuntu Mono has no `→` for the transition table.
+message, convert it with `rsvg-convert`. Both recipes expect `schedule.svg` in the current folder. `font-ubuntu` provides
+Ubuntu Mono, the SVG's first choice of font, and `ttf-dejavu` provides the `→` that Ubuntu Mono lacks.
+
+The SVG decides the theme. `preview render` writes one that follows the viewer, and `rsvg-convert` draws that in light
+colours. For a dark PNG, write the SVG with the
+[canned-schedules](https://github.com/iilei/canned-schedules) CLI first:
+
+```sh
+canned-schedules --svg-theme dark --svg-output-file schedule.svg schedule.md > /dev/null
+```
 
 <details>
 <summary>Nonroot Wolfi image: build it once, then render without network access</summary>
@@ -235,7 +242,7 @@ Ubuntu Mono, the SVG's first choice of font, in `./fonts`. WOFF2 files don't wor
 ```dockerfile
 # Tested with cgr.dev/chainguard/wolfi-base@sha256:580c9ae79c0229cc381475fbfbed0d91fab5d6606e57cd78732f9836de109e90
 FROM cgr.dev/chainguard/wolfi-base
-RUN apk add --no-cache rsvg-convert fontconfig ttf-dejavu
+RUN apk add --no-cache rsvg-convert fontconfig font-ubuntu ttf-dejavu
 USER 65532:65532
 ENTRYPOINT ["rsvg-convert"]
 ```
@@ -247,7 +254,6 @@ docker run --rm --network none --read-only --tmpfs /tmp \
   --cap-drop ALL --security-opt no-new-privileges \
   --user "$(id -u):$(id -g)" -e HOME=/tmp \
   -v "$PWD:/work" \
-  -v "$PWD/fonts:/usr/share/fonts/custom:ro" \
   schedule-png --zoom 2 --background-color white \
   --output /work/schedule.png /work/schedule.svg
 ```
@@ -260,14 +266,11 @@ The PNG belongs to your own user.
 <summary>Alpine one-off: nothing to build, but it runs as root</summary>
 
 ```sh
-docker run --rm \
-  -v "$PWD:/work" \
-  -v "$PWD/fonts:/usr/share/fonts/custom:ro" \
-  alpine:3.22 sh -c '
-    apk add --no-cache --quiet rsvg-convert fontconfig ttf-dejavu
-    rsvg-convert --zoom 2 --background-color white \
-      --output /work/schedule.png /work/schedule.svg
-  '
+docker run --rm -v "$PWD:/work" alpine:3.22 sh -c '
+  apk add --no-cache --quiet rsvg-convert fontconfig font-ubuntu ttf-dejavu
+  rsvg-convert --zoom 2 --background-color white \
+    --output /work/schedule.png /work/schedule.svg
+'
 ```
 
 The PNG belongs to `root`.
