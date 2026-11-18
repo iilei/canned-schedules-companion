@@ -90,6 +90,7 @@ runs:
         {
           printf 'work-dir=%s\n' "$work_dir"
           printf 'out-dir=%s\n' "$OUT_DIR"
+          printf 'source-file=%s-issue-%s.md\n' "${GITHUB_REPOSITORY//\//-}" "$ISSUE"
         } >> "$GITHUB_OUTPUT"
 
     # Verifies the release's build provenance attestation on install.
@@ -111,6 +112,7 @@ runs:
         FLAG_LINES: ${{ inputs.args }}
         FIDDLE_LINK_BASE_URI: ${{ inputs.fiddle-link-base-uri }}
         OUT_DIR: ${{ steps.setup.outputs.out-dir }}
+        SOURCE_FILE: ${{ steps.setup.outputs.source-file }}
       run: |
         set -uo pipefail
         args=()
@@ -130,6 +132,8 @@ runs:
           printf '::error::The preview could not be rendered (exit code %s).\n' "$rc"
           exit 2
         fi
+        # The request exactly as submitted, named after where it came from.
+        cp request.md "$OUT_DIR/$SOURCE_FILE"
         if [[ $rc -eq 0 ]]; then valid=true; else valid=false; fi
         printf 'valid=%s\n' "$valid" >> "$GITHUB_OUTPUT"
 
@@ -156,6 +160,7 @@ runs:
           ${{ steps.setup.outputs.out-dir }}/schedule.json
           ${{ steps.setup.outputs.out-dir }}/schedule.txt
           ${{ steps.setup.outputs.out-dir }}/schedule.svg
+          ${{ steps.setup.outputs.out-dir }}/${{ steps.setup.outputs.source-file }}
         if-no-files-found: error
         retention-days: ${{ inputs.retention-days }}
         overwrite: true
