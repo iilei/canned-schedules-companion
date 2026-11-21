@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"slices"
 	"strings"
@@ -34,9 +35,10 @@ const Suffix = ".canned-schedule.md"
 var (
 	errForge   = errors.New("want github or gitlab")
 	errProject = errors.New("want OWNER/REPO on GitHub, GROUP/PROJECT (subgroups allowed) on GitLab")
-	errServer  = errors.New("want an https URL with a host and nothing after it, e.g. https://gitlab.example.com")
-	errBranch  = errors.New("want a branch name")
-	errSite    = errors.New("the core refuses the site.json")
+	errServer  = errors.New("want an https URL with a host and nothing after it, e.g. https://gitlab.example.com " +
+		"(http only for localhost)")
+	errBranch = errors.New("want a branch name")
+	errSite   = errors.New("the core refuses the site.json")
 )
 
 // Options describe the catalog a playground is set up for.
@@ -180,11 +182,25 @@ func serverURL(forge, server string) (string, error) {
 	}
 
 	u, err := url.Parse(strings.TrimRight(server, "/"))
-	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" ||
+		(u.Scheme != "https" && (u.Scheme != "http" || !loopback(u.Hostname()))) {
 		return "", fmt.Errorf("--server-url %q: %w", server, errServer)
 	}
 
 	return strings.TrimRight(u.String(), "/"), nil
+}
+
+// loopback reports whether host is this machine (localhost, *.localhost, 127.0.0.0/8, ::1), where the core allows
+// http proposal targets: a forge in Docker, such as a local GitLab demo.
+func loopback(host string) bool {
+	host = strings.TrimSuffix(strings.ToLower(host), ".")
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+
+	ip := net.ParseIP(host)
+
+	return ip != nil && ip.IsLoopback()
 }
 
 // validProject accepts OWNER/REPO on GitHub and GROUP/…/PROJECT on GitLab, without empty or dot segments.

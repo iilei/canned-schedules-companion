@@ -125,3 +125,31 @@ func TestNames(t *testing.T) {
 		t.Errorf("%q", got)
 	}
 }
+
+// TestSiteJSONLoopbackHTTP: a forge on this machine (GitLab in Docker for a demo) may be reached over http.
+func TestSiteJSONLoopbackHTTP(t *testing.T) {
+	t.Parallel()
+
+	raw, err := playground.SiteJSON(&playground.Options{
+		Forge:   playground.GitLab,
+		Server:  "http://localhost:8080",
+		Project: "root/canned-schedules-demo",
+		Branch:  "main",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(string(raw), `"create": "http://localhost:8080/root/canned-schedules-demo/-/new/main?`) {
+		t.Errorf("site.json\n%s", raw)
+	}
+
+	for _, server := range []string{"http://gitlab.example.com", "http://localhost.example.com", "http://10.0.0.1"} {
+		if _, err := playground.SiteJSON(&playground.Options{
+			Forge: playground.GitLab, Server: server, Project: "g/p",
+			Branch: "main",
+		}); err == nil {
+			t.Errorf("%s: want an error", server)
+		}
+	}
+}
