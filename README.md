@@ -228,6 +228,44 @@ as GitLab stores it, named after its origin, for example `acme-catalog-issue-12.
 | `expire-in`            | how long the job's files are kept                                                | `30 days`        |
 | `dry-run`              | says what would change, but writes nothing                                       | `false`          |
 
+## GitLab Pages playground
+
+`templates/playground.yml` publishes a [self-hosted playground](#playground-build) for the catalog on GitLab Pages, on
+every pipeline of the default branch, so `site.json` lists the catalog's schedules as they are after each merge. It
+installs the companion, downloads the core's site zip (by default the version the companion is built with, so the
+playground checks as the issue preview does), verifies both with GPG against the release key, runs
+`playground build` and publishes `public/`. It needs no token and no webhook.
+
+```yaml
+include:
+  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.1/templates/playground.yml
+    integrity: sha256-GmwXJQCoplE1xNs7z4hvKSO0kC5Vs6LKsEjA78D2B/M=
+    inputs:
+      name: Acme schedules
+      fork: true
+```
+
+GitLab Pages must be enabled on the instance and the project. The job is named `pages`, so a project can't have a
+`pages` job of its own next to it. The page's proposal targets point at `server-url` (default `$CI_SERVER_URL`), which
+must be https.
+
+| Input          | Meaning                                                                        | Default                 |
+| -------------- | ------------------------------------------------------------------------------ | ----------------------- |
+| `stage`        | the job's stage                                                                | `deploy`                |
+| `version`      | the companion release to install                                               | this file's             |
+| `site-version` | the canned-schedules release whose page to publish                             | the companion's core    |
+| `image`        | the job's image; one with the binary, `curl` and `gnupg` skips the downloads   | `alpine:3.22`           |
+| `server-url`   | the project's web address as readers reach it (https)                          | `$CI_SERVER_URL`        |
+| `branch`       | the branch proposals target                                                    | `$CI_DEFAULT_BRANCH`    |
+| `catalog-dir`  | the catalog's folder                                                           | `schedules`             |
+| `args-file`    | the flags your CI checks with; a missing file means none                       | `canned-schedules.args` |
+| `name`         | shown in the page's header                                                     |                         |
+| `fork`         | link readers who aren't members to the fork page                               | `false`                 |
+| `expire-in`    | how long the job's files are kept                                              | `30 days`               |
+
+`site.json` is as public as the Pages site; for a private catalog, set the Pages site's visibility to project members
+(Settings > General > Visibility > Pages).
+
 ## GitHub Action
 
 The action at the root of this repository checks a schedule request issue and keeps one comment on it up to date. It
