@@ -110,10 +110,15 @@ func TestReview(t *testing.T) {
 
 	defer srv.Close()
 
+	// Relative paths, as git diff names the files in the job (an absolute path on Windows has a colon, which a
+	// catalog path can't have).
 	dir := t.TempDir()
-	file := writeSchedule(t, dir, "night-shift.canned-schedule.md",
+	t.Chdir(dir)
+	writeSchedule(t, dir, "night-shift.canned-schedule.md",
 		"# Night Shift\n\n> [!SCHEDULE-STATE] Medium\n> - `22:00` to `06:00` MON-FRI\n")
-	out := filepath.Join(dir, "out")
+
+	file := "schedules/night-shift.canned-schedule.md"
+	out := "out"
 
 	var stdout, stderr bytes.Buffer
 	if code := run([]string{"review", "render", "--out-dir", out, file}, &stdout, &stderr); code != exitOK {
