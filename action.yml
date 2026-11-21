@@ -1,5 +1,5 @@
 name: Canned schedule issue preview
-description: Checks a schedule request issue and keeps one comment on it up to date, with the week as a download.
+description: Checks an issue that proposes a schedule and keeps one comment on it up to date, with the week as a download.
 branding:
   icon: calendar
   color: green
@@ -36,7 +36,7 @@ inputs:
     description: The login behind the token. Only its comments count as this step's own.
     default: github-actions[bot]
   label:
-    description: Added to the issue when the request is valid, removed when it isn't, so it means "holds a valid schedule". Empty leaves labels alone.
+    description: Added to the issue when the schedule is valid, removed when it isn't, so it means "holds a valid schedule". Empty leaves labels alone.
     default: Schedule
   dry-run:
     description: true reads the issue's comments and says what would change, but writes no comment. The files are still uploaded.
@@ -44,7 +44,7 @@ inputs:
 
 outputs:
   valid:
-    description: true when the request has no errors, false when it has or holds no schedule.
+    description: true when the schedule has no errors, false when it has or holds no schedule.
     value: ${{ steps.render.outputs.valid }}
   schedule:
     description: false when the issue holds no schedule directive; its comment, if any, then says so.
@@ -53,7 +53,7 @@ outputs:
     description: The directory with the files.
     value: ${{ steps.setup.outputs.out-dir }}
   svg-url:
-    description: The link to the week as SVG (valid requests only).
+    description: The link to the week as SVG (valid schedules only).
     value: ${{ steps.svg.outputs.artifact-url }}
   files-url:
     description: The link to all files as one zip (not for an issue without a schedule).
@@ -63,7 +63,7 @@ runs:
   using: composite
   steps:
     # Everything runs from a new directory, so a mise.toml in the caller's checkout can't change what gets installed,
-    # and the report names the request as request.md instead of a path on the runner.
+    # and the report names the proposal as request.md instead of a path on the runner.
     - id: setup
       name: Check the inputs and prepare a working directory
       shell: bash
@@ -109,9 +109,9 @@ runs:
         github_token: ${{ inputs.token }}
         cache: false
 
-    # Exit 1 means the request has errors: the comment still has to reach the issue, so the job fails only at the end.
+    # Exit 1 means the schedule has errors: the comment still has to reach the issue, so the job fails only at the end.
     - id: render
-      name: Check the request and render the preview
+      name: Check the schedule and render the preview
       shell: bash
       working-directory: ${{ steps.setup.outputs.work-dir }}
       env:
@@ -139,7 +139,7 @@ runs:
           printf '::error::The preview could not be rendered (exit code %s).\n' "$rc"
           exit 2
         fi
-        # The request exactly as submitted, named after where it came from.
+        # The proposal exactly as submitted, named after where it came from.
         cp request.md "$OUT_DIR/$SOURCE_FILE"
         # Exit 0 without the week means the issue holds no schedule: neither valid nor an error.
         schedule=true valid=false
@@ -147,7 +147,7 @@ runs:
         if [[ $rc -eq 0 && ! -f $OUT_DIR/schedule.svg ]]; then schedule=false; fi
         printf 'valid=%s\nschedule=%s\n' "$valid" "$schedule" >> "$GITHUB_OUTPUT"
 
-    # The week on its own, not zipped, so the link downloads the SVG itself. Only a valid request has one.
+    # The week on its own, not zipped, so the link downloads the SVG itself. Only a valid schedule has one.
     - id: svg
       if: steps.render.outputs.valid == 'true'
       name: Upload the week as SVG
@@ -208,9 +208,9 @@ runs:
         mise exec "github:iilei/canned-schedules-companion@$VERSION" -- canned-schedules-companion preview post \
           "${flags[@]}" "$OUT_DIR"
 
-    - name: Fail when the request has errors
+    - name: Fail when the schedule has errors
       if: steps.render.outputs.schedule == 'true' && steps.render.outputs.valid == 'false'
       shell: bash
       run: |
-        printf '::error::The schedule request has errors. The comment on the issue lists them.\n'
+        printf '::error::The proposed schedule has errors. The comment on the issue lists them.\n'
         exit 1

@@ -7,7 +7,7 @@ a decision changes.
 ## Goal
 
 The lifecycle steps around canned schedules (issue #38 in the core repo): 1 issue feedback, 2 promotion of an approved
-request to the shelf, 3 publishing, 4 housekeeping. The core stays pure (no network, no forge flags); everything that
+proposal to the catalog, 3 publishing, 4 housekeeping. The core stays pure (no network, no forge flags); everything that
 talks to a forge lives here.
 
 ## Decisions
@@ -28,7 +28,7 @@ talks to a forge lives here.
   plain `<!-- canned-schedules:issue-preview -->`. The example will call this binary instead of its shell.
   `preview render` removes the files of an earlier run first.
 - **Stamp, label and trigger (implemented 2026-11-21, core CLAUDE.md "Issue trigger and label"):**
-  - **The marker line is stamped:** `<!-- canned-schedules:issue-preview sha256=<request> tool=canned-schedules-companion@<version>
+  - **The marker line is stamped:** `<!-- canned-schedules:issue-preview sha256=<proposal> tool=canned-schedules-companion@<version>
     args=<options> -->` (`preview.Stamp`). `sha256` reads CRLF as LF (`BodyDigest`), because the text comes from the
     event or the API; `args` hashes the effective options and the playground base (`ArgsDigest`), so spelling a flag
     differently changes nothing. Forge steps match `preview.Marker`, which ends in a space, so old plain markers are
@@ -36,7 +36,7 @@ talks to a forge lives here.
   - **`preview post` stops early:** it reads the issue first and writes nothing when the text's digest differs from the
     stamp (a newer edit's run posts instead); it leaves a comment with the same stamp alone (on GitLab without
     uploading). A dry-run upsert finds the existing comment first, so the comparison needs no new client method.
-  - **`--label`** adds the label for a valid request and removes it for an invalid one (`report.json`'s
+  - **`--label`** adds the label for a valid schedule and removes it for an invalid one (`report.json`'s
     `summary.errors`), matched ignoring case as GitHub does. Both forges create a missing label (checked live on
     GitLab CE 19.4.1 with a root token, 2026-11-21: create, up to date, invalid edit, stale run). The action's
     `label` input defaults to `Schedule`; the component's `label` changed meaning from filter to managed label.
@@ -92,8 +92,8 @@ talks to a forge lives here.
     stale head writes nothing, a misnamed file reported.
 - **Evaluation flags keep the core CLI's names and meaning** (`--require-base true|false` takes a value), so a
   `canned-schedules.args` line works here too.
-- **Exit codes:** 0 valid, 1 request errors (files still written), 2 usage or environment.
-- **The bundle holds the request (decided 2026-11-18):** the action's zip and the GitLab job's artifacts contain the
+- **Exit codes:** 0 valid, 1 errors in the schedule (files still written), 2 usage or environment.
+- **The bundle holds the proposal (decided 2026-11-18):** the action's zip and the GitLab job's artifacts contain the
   submitted text as `<project path with hyphens>-<kind>-<number>.md` (`acme-catalog-issue-12.md`), so a downloaded file
   says where it came from. On GitHub the kind is always `issue`; on GitLab it follows the work item's type. GitLab
   removes quick actions from a description when it stores it, so its copy is the stored text.
@@ -120,11 +120,11 @@ talks to a forge lives here.
   confidential issues, every role can post on locked and closed issues, and `read_api` only allows `--dry-run`. A
   new project access token can answer 404 for a few seconds, until GitLab has applied its membership.
 - **Playground link, opt-in only (decided 2026-11-08):** previews are CI's job, so nobody has to wonder where a
-  request's data lands; the public Pages site is never linked by default. A team that hosts the preflight page
+  proposal's data lands; the public Pages site is never linked by default. A team that hosts the preflight page
   itself opts in with `preview render --fiddle-link-base-uri <https URI>`: `comment.md` then ends with
   "Try this schedule in the playground and see its week", linking to the base plus `#doc=` and the base64url
   document. The label names the playground
-  (the full preflight page with its editor), not a timetable view, which doesn't exist. Valid requests travel in
+  (the full preflight page with its editor), not a timetable view, which doesn't exist. Valid schedules travel in
   canonical form (no prose), invalid ones as written, so the playground marks their errors; one label for both. The
   base must be `https` with a host, no user info and no `#` (the fragment is the document); a query stays. A link
   over `MaxFiddleLink` (32 KiB) gives way to a notice. Base64url without padding, as the page writes and reads it
@@ -157,17 +157,17 @@ talks to a forge lives here.
 - **Composite action at the repo root (implemented 2026-11-18, first released in `v0.1.1`):** `action.yml`, for
   GitHub's issue preview. It
   installs the release through `jdx/mise-action` (attestation verified, no cache), runs `preview render`, uploads
-  `schedule.svg` unzipped (valid requests only) and every file as one zip, runs `preview post`, and fails last when
-  the request has errors. The caller sets the trigger, the `Schedule` label condition, `concurrency` per issue and
+  `schedule.svg` unzipped (valid schedules only) and every file as one zip, runs `preview post`, and fails last when
+  the schedule has errors. The caller sets the trigger, the `Schedule` label condition, `concurrency` per issue and
   `permissions: contents: read, issues: write`.
   - **`version` defaults to a literal release, not `github.action_ref` (decided 2026-11-18):** callers pin actions to
     commit SHAs, and a SHA names no release. The PR that prepares a release bumps the default; `action:version`
     fails the release build when it differs from the tag. CI passes the newest published release explicitly, so that
     PR stays green before the tag exists.
   - **Everything runs from a new directory under `RUNNER_TEMP`,** so a `mise.toml` in the caller's checkout can't
-    change what gets installed, and reports name the request `request.md`, not a path on the runner.
+    change what gets installed, and reports name the proposal `request.md`, not a path on the runner.
   - **`comment-author` is an input,** because a `token` other than `github.token` writes under another login.
-  - Tested in `check.yml` (job `action`) with a valid and an invalid request, as dry runs against an existing pull
+  - Tested in `check.yml` (job `action`) with a valid and an invalid schedule, as dry runs against an existing pull
     request; `lint:actions` runs `actionlint`.
 - **Dependabot auto-merge (decided 2026-11-18), as in the core:** on pull requests opened by Dependabot, `check.yml`
   adds `binaries` (`release:snapshot`) and `automerge`, which needs `check`, `test`, `action` and `binaries`, then
@@ -204,7 +204,7 @@ talks to a forge lives here.
 1. **GitLab catalog, only if teams ask:** a project on gitlab.com for catalog search and the short `component:` syntax.
 2. **The screen recording** with the public demo repo
    [`canned-schedules-demo`](https://github.com/iilei/canned-schedules-demo), a copy of the core's `examples/consumer`.
-   Its first request (issue #1) ran the action for real on 2026-11-18: the comment was created, updated in place for an
+   Its first proposal (issue #1) ran the action for real on 2026-11-18: the comment was created, updated in place for an
    invalid and a fixed edit, and the artifacts were uploaded.
 
 ## Layout
@@ -220,4 +220,4 @@ talks to a forge lives here.
 - `internal/forge`: what the forge clients share.
 - `internal/forge/github`: the only code that talks to GitHub.
 - `internal/forge/gitlab`: the only code that talks to GitLab.
-- `testdata/`: request inputs (`office-hours.md` is the core's GitLab issue template).
+- `testdata/`: proposal inputs (`office-hours.md` is the core's GitLab issue template).

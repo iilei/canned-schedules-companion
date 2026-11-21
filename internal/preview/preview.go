@@ -1,4 +1,4 @@
-// Package preview is the local part of step 1, issue feedback: it evaluates a schedule request (an issue body) and
+// Package preview is the local part of step 1, issue feedback: it evaluates a schedule proposal (an issue body) and
 // produces the files a forge step posts or uploads, without touching the network or the file system.
 package preview
 
@@ -23,7 +23,7 @@ const (
 // minFence is the shortest fence around the text form; it grows past any tilde run inside.
 const minFence = 8
 
-// NoSchedule is the comment's text, after the marker line, for a request that holds no schedule directive: an issue
+// NoSchedule is the comment's text, after the marker line, for a proposal that holds no schedule directive: an issue
 // that only asks about the syntax, or one whose schedule was edited away. Forge steps post it only over an earlier
 // comment, so the issue keeps no stale preview, and never start a comment with it.
 const NoSchedule = "This issue holds no schedule (any more), so there is nothing to check.\n"
@@ -31,7 +31,7 @@ const NoSchedule = "This issue holds no schedule (any more), so there is nothing
 // Names lists every file Render can produce, so a caller can remove stale ones first.
 var Names = []string{ReportMarkdown, ReportJSON, Comment, ScheduleJSON, ScheduleText, ScheduleSVG}
 
-// Result is what Render produced: file name → content. A valid request has every file, an invalid one only the
+// Result is what Render produced: file name → content. A valid schedule has every file, an invalid one only the
 // reports and the comment.
 type Result struct {
 	Files map[string][]byte
@@ -43,7 +43,7 @@ type Result struct {
 
 // Render evaluates src (named file in the reports) with opts, which must plan a preview (opts.Preview). With a
 // fiddle base (opt-in: a preflight page the team hosts), the comment links to it with the document: the canonical
-// form of a valid request, the request as written otherwise, so the playground shows its errors at their lines.
+// form of a valid schedule, the schedule as written otherwise, so the playground shows its errors at their lines.
 // tool names the program and its version in the comment's stamp. The error is only for unusable options or a
 // rendering bug; document problems are in the reports and the comment.
 func Render(src []byte, file string, opts *cs.Options, fiddle *url.URL, tool string) (*Result, error) {
@@ -103,7 +103,7 @@ func Render(src []byte, file string, opts *cs.Options, fiddle *url.URL, tool str
 	return res, nil
 }
 
-// comment is the stamped marker, the report and, for a valid request, the text form inside a fence, so nothing in it
+// comment is the stamped marker, the report and, for a valid schedule, the text form inside a fence, so nothing in it
 // renders as Markdown. A forge step may append links to the files it uploaded.
 func comment(stamp Stamp, report, text []byte) []byte {
 	var b bytes.Buffer
