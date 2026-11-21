@@ -5,6 +5,7 @@ package gitlab
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -52,6 +53,12 @@ type note struct {
 	Body   string `json:"body"`
 	ID     int64  `json:"id"`
 	System bool   `json:"system"`
+}
+
+// errStatus marks an answer whose HTTP status a caller looks at, e.g. 404 for a missing branch or file.
+type errStatus struct {
+	err  error
+	code int
 }
 
 // CurrentUser is the username behind the token. A project access token has a generated one, so this is how a step
@@ -237,6 +244,123 @@ func (c *Client) Upload(ctx context.Context, repo, name string, data []byte) (st
 	return got.URL, nil
 }
 
+// BranchExists reports whether the branch exists.
+func (c *Client) BranchExists(ctx context.Context, repo, branch string) (bool, error) {
+	base, err := projectPath(repo)
+	if err != nil {
+		return false, err
+	}
+
+	err = c.do(ctx, http.MethodGet, base+"/repository/branches/"+url.PathEscape(branch), nil, nil)
+	if notFound(err) {
+		return false, nil
+	}
+
+	return err == nil, err
+}
+
+// File reads a file on a branch; nil without an error means the branch has no such file.
+func (c *Client) File(ctx context.Context, repo, ref, file string) (*forge.File, error) {
+	base, err := projectPath(repo)
+	if err != nil {
+		return nil, err
+	}
+
+	var got struct {
+		Content  string `json:"content"`
+		Encoding string `json:"encoding"`
+	}
+
+	path := base + "/repository/files/" + url.PathEscape(file) + "?ref=" + url.QueryEscape(ref)
+
+	err = c.do(ctx, http.MethodGet, path, nil, &got)
+	if notFound(err) {
+		return nil, nil //nolint:nilnil // No file is an answer, not an error.
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	if got.Encoding != "base64" {
+		return nil, fmt.Errorf("%s: content encoded as %q", file, got.Encoding)
+	}
+
+	raw, err := base64.StdEncoding.DecodeString(got.Content)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", file, err)
+	}
+
+	return &forge.File{Content: raw}, nil
+}
+
+// CommitFile writes one file to a branch in one commit, creating the branch from cm.From when it is set.
+func (c *Client) CommitFile(ctx context.Context, cm *forge.Commit) error {
+	base, err := projectPath(cm.Repo)
+	if err != nil {
+		return err
+	}
+
+	action := "create"
+	if cm.Replace != nil {
+		action = "update"
+	}
+
+	payload := map[string]any{
+		"branch":         cm.Branch,
+		"commit_message": cm.Message,
+		"actions": []map[string]string{{
+			"action": action, "file_path": cm.Path, "content": base64.StdEncoding.EncodeToString(cm.Content),
+			"encoding": "base64",
+		}},
+	}
+	if cm.From != "" {
+		payload["start_branch"] = cm.From
+	}
+
+	return c.do(ctx, http.MethodPost, base+"/repository/commits", payload, nil)
+}
+
+// OpenRequest finds the open merge request from the branch, or opens one; it returns the merge request's page and
+// whether it was opened now.
+func (c *Client) OpenRequest(ctx context.Context, r *forge.Request, dryRun bool) (string, bool, error) {
+	base, err := projectPath(r.Repo)
+	if err != nil {
+		return "", false, err
+	}
+
+	var open []struct {
+		URL string `json:"web_url"`
+	}
+
+	q := "?state=opened&source_branch=" + url.QueryEscape(r.Branch)
+	if err := c.do(ctx, http.MethodGet, base+"/merge_requests"+q, nil, &open); err != nil {
+		return "", false, err
+	}
+
+	if len(open) > 0 {
+		return open[0].URL, false, nil
+	}
+
+	if dryRun {
+		return "", true, nil
+	}
+
+	var made struct {
+		URL string `json:"web_url"`
+	}
+
+	payload := map[string]any{
+		"source_branch": r.Branch, "target_branch": r.Base, "title": r.Title, "description": r.Body,
+		"remove_source_branch": true,
+	}
+	if err := c.do(ctx, http.MethodPost, base+"/merge_requests", payload, &made); err != nil {
+		return "", false, err
+	}
+
+	return made.URL, true, nil
+}
+
 func (c *Client) label(ctx context.Context, repo string, issue int, field, label string) error {
 	// The API reads these fields as comma-separated lists.
 	if strings.Contains(label, ",") {
@@ -360,7 +484,10 @@ func (c *Client) send(ctx context.Context, method, path, contentType string, bod
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
 
-		return fmt.Errorf("%s %s: %s: %s", method, req.URL.Path, resp.Status, bytes.TrimSpace(msg))
+		return &errStatus{
+			err:  fmt.Errorf("%s %s: %s: %s", method, req.URL.Path, resp.Status, bytes.TrimSpace(msg)),
+			code: resp.StatusCode,
+		}
 	}
 
 	if out == nil {
@@ -372,4 +499,15 @@ func (c *Client) send(ctx context.Context, method, path, contentType string, bod
 	}
 
 	return nil
+}
+
+func (e *errStatus) Error() string { return e.err.Error() }
+
+func (e *errStatus) Unwrap() error { return e.err }
+
+// notFound reports whether err is the API's 404.
+func notFound(err error) bool {
+	var s *errStatus
+
+	return errors.As(err, &s) && s.code == http.StatusNotFound
 }

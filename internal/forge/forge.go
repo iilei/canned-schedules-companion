@@ -57,3 +57,41 @@ type Upsert struct {
 	// DryRun reads but never writes.
 	DryRun bool
 }
+
+// File is a file as a forge returns it from a branch.
+type File struct {
+	// Version is what the forge needs to update the file: the blob SHA on GitHub, unused on GitLab.
+	Version string
+	// Content is the file's bytes.
+	Content []byte
+}
+
+// Commit is one file written to a branch.
+type Commit struct {
+	// Replace is the file it updates, nil for a new file.
+	Replace *File
+	// Repo is the project.
+	Repo string
+	// Branch receives the commit; with From set it is created from From first.
+	Branch string
+	// From is the branch a new Branch starts at; empty when Branch exists.
+	From string
+	// Path is the file's path in the repository.
+	Path string
+	// Message is the commit message.
+	Message string
+	// Content is the file's new text.
+	Content []byte
+}
+
+// Request is a pull request (GitHub) or merge request (GitLab) to open.
+type Request struct {
+	// Repo is the project.
+	Repo string
+	// Branch is the source branch.
+	Branch string
+	// Base is the target branch.
+	Base string
+	// Title and Body are the request's title and description.
+	Title, Body string
+}
