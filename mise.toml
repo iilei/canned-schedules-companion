@@ -68,8 +68,17 @@ done
 for f in schedule.json schedule.svg schedule.txt; do
   if test -e "$usage_invalid_dir/$f"; then echo "unexpected: $f" >&2; exit 1; fi
 done
-for d in "$usage_valid_dir" "$usage_invalid_dir"; do
-  head -n 1 "$d/comment.md" | grep -qx '<!-- canned-schedules:issue-preview -->'
+# The marker line carries the stamp: the request's SHA-256 (the files have LF endings, as the stamp reads them),
+# the tool and the options' hash.
+for pair in "$usage_valid_dir:testdata/office-hours.md" "$usage_invalid_dir:testdata/invalid-name.md"; do
+  d=${pair%%:*} request=${pair#*:}
+  sum=$(sha256sum "$request" | cut -d' ' -f1)
+  line=$(head -n 1 "$d/comment.md")
+  printf '%s\n' "$line" |
+    grep -Eqx "<!-- canned-schedules:issue-preview sha256=$sum tool=canned-schedules-companion@[^ ]+ args=[0-9a-f]{64} -->" || {
+    echo "comment.md for $request doesn't start with its stamped marker: $line" >&2
+    exit 1
+  }
 done
 cmp testdata/office-hours.md "$usage_valid_dir"/*-issue-11.md
 cmp testdata/invalid-name.md "$usage_invalid_dir"/*-issue-11.md
