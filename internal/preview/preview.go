@@ -63,7 +63,7 @@ func Render(src []byte, file string, opts *cs.Options, fiddle *url.URL, tool str
 		return nil, err
 	}
 
-	stamp := Stamp{Body: BodyDigest(src), Tool: toolName(tool), Args: ArgsDigest(opts, fiddle)}
+	stamp := Stamp{Body: BodyDigest(src), Tool: ToolName(tool), Args: ArgsDigest(opts, fiddle)}
 
 	if !res.Schedule {
 		res.Valid = false

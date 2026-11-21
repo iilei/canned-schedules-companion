@@ -80,7 +80,7 @@ func (c *Client) UpsertNote(ctx context.Context, u *forge.Upsert) (*forge.Plan, 
 		return nil, err
 	}
 
-	issue := project + "/issues/" + strconv.Itoa(u.Issue)
+	issue := project + resource(u.MergeRequest) + strconv.Itoa(u.Issue)
 
 	var info struct {
 		WebURL string `json:"web_url"`
@@ -162,6 +162,41 @@ func (c *Client) RemoveLabel(ctx context.Context, repo string, issue int, label 
 	return c.label(ctx, repo, issue, "remove_labels", label)
 }
 
+// MergeRequest reads a merge request's title, head commit and labels.
+func (c *Client) MergeRequest(ctx context.Context, repo string, iid int) (*forge.MergeRequest, error) {
+	project, err := projectPath(repo)
+	if err != nil {
+		return nil, err
+	}
+
+	var got struct {
+		Title  string   `json:"title"`
+		SHA    string   `json:"sha"`
+		Labels []string `json:"labels"`
+	}
+
+	if err := c.do(ctx, http.MethodGet, project+"/merge_requests/"+strconv.Itoa(iid), nil, &got); err != nil {
+		return nil, err
+	}
+
+	return &forge.MergeRequest{Title: got.Title, SHA: got.SHA, Labels: got.Labels}, nil
+}
+
+// AddMergeRequestLabel adds a label to a merge request.
+func (c *Client) AddMergeRequestLabel(ctx context.Context, repo string, iid int, label string) error {
+	return c.updateMergeRequest(ctx, repo, iid, "add_labels", label)
+}
+
+// RemoveMergeRequestLabel removes a label from a merge request.
+func (c *Client) RemoveMergeRequestLabel(ctx context.Context, repo string, iid int, label string) error {
+	return c.updateMergeRequest(ctx, repo, iid, "remove_labels", label)
+}
+
+// SetMergeRequestTitle renames a merge request.
+func (c *Client) SetMergeRequestTitle(ctx context.Context, repo string, iid int, title string) error {
+	return c.updateMergeRequest(ctx, repo, iid, "title", title)
+}
+
 // Upload stores a file in the project and returns its path, relative to the project, for use in a note.
 func (c *Client) Upload(ctx context.Context, repo, name string, data []byte) (string, error) {
 	project, err := projectPath(repo)
@@ -214,6 +249,28 @@ func (c *Client) label(ctx context.Context, repo string, issue int, field, label
 	}
 
 	return c.do(ctx, http.MethodPut, project+"/issues/"+strconv.Itoa(issue), map[string]string{field: label}, nil)
+}
+
+func (c *Client) updateMergeRequest(ctx context.Context, repo string, iid int, field, value string) error {
+	if field != "title" && strings.Contains(value, ",") {
+		return fmt.Errorf("label %q: %w", value, errLabel)
+	}
+
+	project, err := projectPath(repo)
+	if err != nil {
+		return err
+	}
+
+	return c.do(ctx, http.MethodPut, project+"/merge_requests/"+strconv.Itoa(iid), map[string]string{field: value}, nil)
+}
+
+// resource is the path segment of the thing a note goes to.
+func resource(mergeRequest bool) string {
+	if mergeRequest {
+		return "/merge_requests/"
+	}
+
+	return "/issues/"
 }
 
 // marked lists the issue's notes by u.Author that start with u.Marker, oldest first. System notes ("closed the

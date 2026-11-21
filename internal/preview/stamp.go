@@ -31,16 +31,22 @@ type Stamp struct {
 }
 
 // Line is the stamped marker line, without the newline.
-func (s Stamp) Line() string {
-	return Marker + "sha256=" + s.Body + " tool=" + s.Tool + " args=" + s.Args + " " + markerEnd
+func (s Stamp) Line() string { return s.LineFor(Marker) }
+
+// LineFor is Line with another step's marker (which ends in a space, like Marker).
+func (s Stamp) LineFor(marker string) string {
+	return marker + "sha256=" + s.Body + " tool=" + s.Tool + " args=" + s.Args + " " + markerEnd
 }
 
 // ParseStamp reads the stamp from a comment's first line. It reports false for a comment without one, such as the
 // plain marker of earlier releases, so such a comment is always rendered again.
-func ParseStamp(comment string) (Stamp, bool) {
+func ParseStamp(comment string) (Stamp, bool) { return ParseStampFor(Marker, comment) }
+
+// ParseStampFor is ParseStamp for another step's marker.
+func ParseStampFor(marker, comment string) (Stamp, bool) {
 	line, _, _ := strings.Cut(comment, "\n")
 
-	rest, ok := strings.CutPrefix(strings.TrimRight(line, "\r"), Marker)
+	rest, ok := strings.CutPrefix(strings.TrimRight(line, "\r"), marker)
 	if !ok {
 		return Stamp{}, false
 	}
@@ -93,8 +99,8 @@ func ArgsDigest(opts *cs.Options, fiddle *url.URL) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// toolName keeps the tool field one word, so the marker line stays parseable whatever a version string holds.
-func toolName(s string) string {
+// ToolName keeps the tool field one word, so the marker line stays parseable whatever a version string holds.
+func ToolName(s string) string {
 	s = strings.Join(strings.Fields(s), "_")
 	s = strings.ReplaceAll(s, markerEnd, "")
 

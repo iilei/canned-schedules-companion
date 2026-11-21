@@ -211,7 +211,7 @@ func syncLabel(ctx context.Context, f *postFlags, c client, issue *forge.Issue, 
 		}
 	}
 
-	verb := map[bool]string{true: "would ", false: ""}[f.dryRun]
+	verb := would(f.dryRun)
 	where := fmt.Sprintf("%s#%d", f.repo, f.issue)
 
 	switch {
@@ -311,7 +311,7 @@ func gitLabTarget(ctx context.Context, f *postFlags, dir string, raw []byte, tok
 }
 
 func report(w io.Writer, f *postFlags, author string, p *forge.Plan) {
-	verb := map[bool]string{true: "would ", false: ""}[f.dryRun]
+	verb := would(f.dryRun)
 	where := fmt.Sprintf("%s#%d", f.repo, f.issue)
 
 	if p.Action == forge.ActionUpdate {
@@ -325,6 +325,15 @@ func report(w io.Writer, f *postFlags, author string, p *forge.Plan) {
 		fmt.Fprintf(w, "%s%s %d duplicate comment(s) by %s\n", verb, pastOr(f.dryRun, "delete", "deleted"),
 			len(p.Delete), author)
 	}
+}
+
+// would starts a dry run's message.
+func would(dry bool) string {
+	if dry {
+		return "would "
+	}
+
+	return ""
 }
 
 func pastOr(dry bool, present, past string) string {
