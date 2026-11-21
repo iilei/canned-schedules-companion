@@ -155,8 +155,8 @@ prefills an existing file), **Open as issue** a new
 issue (see "Your own playground" in the core's README).
 
 The command is local: it reads files and writes files, nothing else. Download the zip first and verify it (the GPG
-signature on `checksums.txt`, then its SHA-256), and publish the directory afterwards; the GitHub Action and the GitLab
-component will do both.
+signature on `checksums.txt`, then its SHA-256), and publish the directory afterwards; the
+[GitHub Action](#github-pages-playground) and the [GitLab component](#gitlab-pages-playground) do both.
 
 | Flag                  | Meaning                                                                                     |
 | --------------------- | ------------------------------------------------------------------------------------------- |
@@ -185,28 +185,31 @@ pages.
 
 ```sh
 canned-schedules-companion review render [flags] schedules/night-shift.canned-schedule.md …
-canned-schedules-companion review post --forge gitlab --repo GROUP/PROJECT --merge-request N [flags] dir
+canned-schedules-companion review post --forge github|gitlab --repo OWNER/REPO --merge-request N [flags] dir
 ```
 
-Reviews a merge request that changes the catalog, for example one proposed from the
+Reviews a merge request (a pull request on GitHub) that changes the catalog, for example one proposed from the
 [self-hosted playground](#playground-build). `review render` checks each changed schedule file with the core and
 the catalog's rule that **a file is named after its schedule** (`Night Shift` → `night-shift.canned-schedule.md`), and
 writes one comment: an overview, then each file's report and week. Paths with characters a catalog file can't have are
 reported without being echoed. Exit codes: 0 all valid, 1 problems, 2 unusable input.
 
-`review post` keeps **one note per merge request**, like the issue preview: the same stamp leaves it alone, and when
+`review post` keeps **one comment per merge request**, like the issue preview: the same stamp leaves it alone, and when
 the merge request has moved on to another commit than `--head-sha`, nothing is written, so that commit's pipeline
 posts. `--label` adds the label when every schedule is valid and removes it otherwise. `--retitle` names the merge
 request after its schedules (`Schedule: Night Shift`), but only while it has the title the web editor gave it ("Add
-new file", "Update schedules/….canned-schedule.md"), never one a person wrote. GitLab for now; GitHub follows.
+new file", "Update schedules/….canned-schedule.md", GitHub's "Create night-shift.canned-schedule.md"), never one a
+person wrote. On GitHub the comment, the labels and the title go through the REST API with the workflow token; the
+default `--author` is `github-actions[bot]`, on GitLab the token's user.
 
 | Flag              | Meaning                                                                          |
 | ----------------- | -------------------------------------------------------------------------------- |
 | `--head-sha sha`  | the commit the review is for (`$CI_COMMIT_SHA`)                                  |
 | `--label name`    | added when every schedule is valid, removed otherwise                            |
 | `--retitle`       | name the merge request after its schedules while it has the default title        |
-| `--token-env`     | the variable with the token (default `GITLAB_TOKEN`)                             |
-| `--api-url`       | the REST API (default gitlab.com's)                                              |
+| `--token-env`     | the variable with the token (default `GITHUB_TOKEN` or `GITLAB_TOKEN`)           |
+| `--api-url`       | the REST API (default github.com's or gitlab.com's)                              |
+| `--author`        | only this login's comments count as the step's own                               |
 | `--dry-run`       | read and say what would change, but write nothing                                |
 
 `templates/review.yml` runs both in merge request pipelines that touch `catalog-dir/*.canned-schedule.md`. It reads
@@ -220,7 +223,8 @@ include:
 ```
 
 Merge requests from forks run their pipelines in the fork, where the variable isn't set; let the project run fork
-pipelines in the parent project, or review them by hand.
+pipelines in the parent project, or review them by hand. On GitHub, [`review/action.yml`](#github-pull-request-review)
+runs both.
 
 ## GitLab CI/CD component
 
@@ -369,6 +373,133 @@ Outputs: `valid` (`true` or `false`), `schedule` (`false` when the issue holds n
 
 The zip also holds the proposal exactly as submitted, named after its origin, for example
 `acme-catalog-issue-12.md`.
+
+## GitHub Pages playground
+
+`playground/action.yml` builds a [self-hosted playground](#playground-build) for the catalog and uploads it for GitHub
+Pages. It installs the companion (mise verifies the release's provenance attestation), downloads the core's site zip
+(by default the version the companion is built with, so the playground checks as the review does), verifies it with GPG
+against the release key, runs `playground build --forge github` and uploads the site with `upload-pages-artifact`.
+Deploying takes a job of its own, since only a job can name the `github-pages` environment. Run it on every push to
+the default branch, so `site.json` lists the catalog's schedules as they are after each merge. Linux runners only.
+
+One-time setup: Settings → Pages → Build and deployment → Source: "GitHub Actions".
+
+```yaml
+name: playground
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: playground
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@<commit SHA> # <release tag>
+        with:
+          persist-credentials: false
+      - uses: iilei/canned-schedules-companion/playground@<commit SHA> # <release tag>
+        with:
+          name: Acme schedules
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@<commit SHA> # <release tag>
+```
+
+| Input          | Meaning                                                            | Default                    |
+| -------------- | ------------------------------------------------------------------ | -------------------------- |
+| `version`      | the companion release to install                                   | this action's release      |
+| `site-version` | the canned-schedules release whose page to publish                 | the companion's core       |
+| `server-url`   | the forge's web address as readers reach it (https)                | `github.server_url`        |
+| `repository`   | where proposals go, `OWNER/REPO`                                   | `github.repository`        |
+| `branch`       | the branch proposals target                                        | the default branch         |
+| `catalog-dir`  | the catalog's folder                                               | `schedules`                |
+| `args-file`    | the flags your CI checks with; a missing file means none           | `canned-schedules.args`    |
+| `name`         | shown in the page's header                                         |                            |
+| `fork`         | `true` links readers who can't push to the fork page               | `false`                    |
+| `token`        | lets mise read the release from GitHub's API                       | `github.token`             |
+
+Outputs: `site-dir` (the built site) and `artifact-id` (the uploaded Pages artifact).
+
+GitHub's new-file page takes the schedule from the link; its edit page doesn't, so **Propose change** copies the
+schedule and opens the page. `site.json` is as public as the Pages site: whether a private repository's Pages site can be
+restricted depends on the plan.
+
+## GitHub pull request review
+
+`review/action.yml` runs [`review render` and `review post`](#review-render--review-post) on a pull request that
+changes the catalog: one comment kept up to date, the label, and a title named after the schedules while the pull
+request has the web editor's default. The flags come from the args file **on the base branch**, so a pull request
+can't loosen its own check. The review also goes to the job summary. A schedule with errors still gets its comment;
+the job fails afterwards.
+
+```yaml
+name: schedule review
+
+on:
+  pull_request:
+    paths:
+      - schedules/*.canned-schedule.md
+
+permissions:
+  contents: read
+
+concurrency:
+  group: schedule-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write # Renames the pull request.
+      issues: write # Comments and labels go through the issues API.
+    steps:
+      - uses: actions/checkout@<commit SHA> # <release tag>
+        with:
+          fetch-depth: 0 # The diff needs the base commit.
+          persist-credentials: false
+      - uses: iilei/canned-schedules-companion/review@<commit SHA> # <release tag>
+```
+
+| Input            | Meaning                                                                          | Default                 |
+| ---------------- | -------------------------------------------------------------------------------- | ----------------------- |
+| `version`        | the companion release to install                                                 | this action's release   |
+| `catalog-dir`    | the catalog's folder; only its `*.canned-schedule.md` files are reviewed         | `schedules`             |
+| `args-file`      | the flags to check with, read from the base branch                               | `canned-schedules.args` |
+| `label`          | added when every changed schedule is valid, removed otherwise; empty: no labels  | `Schedule`              |
+| `retitle`        | `true` names the pull request after its schedules while it has the default title | `true`                  |
+| `token`          | comments on, labels and renames the pull request                                 | `github.token`          |
+| `comment-author` | the login behind `token`                                                         | `github-actions[bot]`   |
+| `dry-run`        | `true` reads the pull request and says what would change, but writes nothing     | `false`                 |
+
+Outputs: `valid` (`true` or `false`) and `out-dir`.
+
+Pull requests from forks get a read-only token on `pull_request`: the review then goes to the job summary only. The
+action doesn't support `pull_request_target`, which would run with write access next to a fork's files.
 
 ## Using the JSON
 

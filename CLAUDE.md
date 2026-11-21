@@ -83,7 +83,23 @@ talks to a forge lives here.
     plus `MergeRequest`, merge request labels and `SetMergeRequestTitle`. Skips when the MR's head isn't
     `--head-sha`; leaves a note with the same stamp alone; `--label` as for issues; `--retitle` only while the title
     is the web editor's default (`review.DefaultTitle`: "Add new file", "Add|Update|Create|Edit|Delete
-    <…canned-schedule.md>"), to `Schedule: <name>` or `Schedules: a, b`. GitHub returns "not yet".
+    <…canned-schedule.md>"), to `Schedule: <name>` or `Schedules: a, b`.
+  - `review post --forge github` (2026-11-21): the command takes a `reviewForge` interface; the GitHub client adds
+    `UpsertNote` (`UpsertComment`: pull requests take comments through the issues API), `MergeRequest` (`GET pulls/N`:
+    title, `head.sha`, labels), labels through the issues API and `SetMergeRequestTitle` (`PATCH pulls/N`). Defaults as
+    in `preview post`: `GITHUB_TOKEN`, github.com's API, author `github-actions[bot]`; 65,536 bytes per comment.
+    Checked live with a local build on `canned-schedules-demo` #10 (as the user's account): comment created, label
+    added, "Create night-shift.canned-schedule.md" renamed, a second run up to date.
+  - `review/action.yml` (2026-11-21): on `pull_request` only (refuses other events), after a checkout with
+    `fetch-depth: 0`; files from `git diff --diff-filter=ACMR base...head`, flags from the args file at the base SHA.
+    The binary's path is looked up from a work directory, so mise never reads a `mise.toml` of the checkout, and runs
+    in the checkout (files keep their repository paths). The comment also goes to the job summary; a pull request
+    from a fork (head repo ≠ repository) stops before posting, since its token is read-only. `pull_request_target` is
+    deliberately unsupported. Permissions: `contents: read`, `pull-requests: write` (title), `issues: write`.
+  - `playground/action.yml` (2026-11-21): mise installs the companion; the site zip is fetched and verified with GPG
+    as in `templates/playground.yml`; `playground build --forge github`, then `upload-pages-artifact`. The caller
+    deploys with `deploy-pages` in a job of its own (only a job can name the `github-pages` environment). Linux only.
+    Live on `canned-schedules-demo` (Pages source "GitHub Actions", enabled 2026-11-21) from the branch commit.
   - `templates/review.yml`: merge request pipelines that change `catalog-dir/*.canned-schedule.md`, `GIT_DEPTH: 0`,
     files from `git diff --diff-filter=ACMR` against `$CI_MERGE_REQUEST_DIFF_BASE_SHA`, flags from the args file at
     that base commit (an MR can't loosen its own check). Needs `CANNED_SCHEDULES_TOKEN` with the Developer role.
@@ -217,6 +233,8 @@ talks to a forge lives here.
 - `internal/playground`: `playground build`'s local part (`SiteJSON`, `ReadArgs`, `Names`), pure.
 - `internal/review`: the merge request review's local part (`Render`, `Title`, `DefaultTitle`), pure.
 - `templates/review.yml`: the GitLab component that reviews merge requests.
+- `playground/action.yml`, `review/action.yml`: the GitHub Actions for the playground on Pages and the pull request
+  review; `action:version` checks their version defaults with the others.
 - `internal/preview`: step 1's local part (`Render`, `Body`, `ParseLink`, `ParseFiddleBase`, `FiddleLink`), pure.
 - `internal/forge`: what the forge clients share.
 - `internal/forge/github`: the only code that talks to GitHub.
