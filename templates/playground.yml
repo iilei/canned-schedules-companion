@@ -12,7 +12,7 @@ spec:
       default: deploy
     version:
       description: The canned-schedules-companion release to install.
-      default: "0.3.1"
+      default: "0.3.2"
       regex: ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$
     site-version:
       description: The canned-schedules release whose page to publish. Empty means the one the companion is built with, so the playground checks as the issue preview does.
