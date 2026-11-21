@@ -1,0 +1,160 @@
+# Promotes an approved issue to the catalog: when someone adds the approval label to an issue that proposes a
+# schedule, the job checks the issue's text with the catalog's flags, commits it as catalog-dir/<file name of its
+# title> to the branch canned-schedules/issue-<N> and opens one merge request that closes the issue. The text goes in
+# as the author wrote it. An issue without a valid schedule gets the label taken back. Setting labels takes the
+# Reporter role or more, so that is who approves.
+#
+# It runs in the pipeline the issue preview's webhook starts (an issue event with TRIGGER_PAYLOAD) and acts only when
+# that event added the approval label. The job needs the CI/CD variable CANNED_SCHEDULES_TOKEN (the issue preview's: a
+# project access token with the api scope and the Developer role, so it may push a branch and open merge requests).
+# The merge request runs the merge request review like any other.
+spec:
+  description: Opens a merge request that adds an approved issue's schedule to the catalog.
+  inputs:
+    stage:
+      description: The stage of the job.
+      default: deploy
+    version:
+      description: The canned-schedules-companion release to install.
+      default: "0.3.3"
+      regex: ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$
+    image:
+      description: The job's image. An image that already contains the binary, curl, jq and gnupg skips the downloads.
+      default: alpine:3.22
+    approved-label:
+      description: The label that approves an issue.
+      default: Schedule approved
+    catalog-dir:
+      description: The catalog's folder in the repository.
+      default: schedules
+    args-file:
+      description: The flags to check with, as canned-schedules.args, read from the pipeline's checkout. A missing file means none.
+      default: canned-schedules.args
+    base-branch:
+      description: The branch the merge request targets.
+      default: $CI_DEFAULT_BRANCH
+    branch-prefix:
+      description: The merge request's branch is this prefix plus the issue number.
+      default: canned-schedules/issue-
+    api-url:
+      description: The REST API as a job reaches it.
+      default: $CI_API_V4_URL
+    dry-run:
+      description: Reads the project and says what would change, but writes nothing.
+      type: boolean
+      default: false
+---
+canned-schedule-promotion:
+  stage: $[[ inputs.stage ]]
+  image: $[[ inputs.image ]]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "trigger" && $TRIGGER_PAYLOAD
+  resource_group: canned-schedule-promotion
+  variables:
+    CS_VERSION: $[[ inputs.version ]]
+    CS_APPROVED_LABEL: $[[ inputs.approved-label ]]
+    CS_CATALOG_DIR:
+      value: $[[ inputs.catalog-dir ]]
+      expand: false
+    CS_ARGS_FILE:
+      value: $[[ inputs.args-file ]]
+      expand: false
+    CS_BASE_BRANCH: $[[ inputs.base-branch ]]
+    CS_BRANCH_PREFIX:
+      value: $[[ inputs.branch-prefix ]]
+      expand: false
+    CS_API_URL: $[[ inputs.api-url ]]
+    CS_DRY_RUN: $[[ inputs.dry-run ]]
+    # canned-schedules' release key, the only one that may sign the download.
+    CS_RELEASE_KEY: B645234C9CB8175ECA5D78A5C8447A2252E9E7B6
+  script:
+    - |
+      set -eu
+
+      fail() {
+        printf 'canned-schedule-promotion: %s\n' "$1" >&2
+        exit 2
+      }
+
+      [ -n "${CANNED_SCHEDULES_TOKEN:-}" ] || fail 'set the CI/CD variable CANNED_SCHEDULES_TOKEN'
+
+      if ! command -v curl >/dev/null || ! command -v jq >/dev/null; then
+        apk add --no-cache --quiet curl jq
+      fi
+
+      # Only an issue update that added the approval label (GitLab lists the labels before and after).
+      if ! jq -e --arg label "$CS_APPROVED_LABEL" '
+          .object_kind == "issue" and .object_attributes.action == "update"
+          and any(.changes.labels.current[]?; .title == $label)
+          and (any(.changes.labels.previous[]?; .title == $label) | not)' "$TRIGGER_PAYLOAD" >/dev/null; then
+        echo "Nothing to do for this event."
+        exit 0
+      fi
+
+      iid=$(jq -r '.object_attributes.iid // ""' "$TRIGGER_PAYLOAD")
+      case $iid in
+        '' | *[!0-9]*) fail 'the event names no issue' ;;
+      esac
+
+      # The text as GitLab stores it now, not as the event carried it.
+      work_dir=$(mktemp -d)
+      printf 'header = "PRIVATE-TOKEN: %s"\n' "$CANNED_SCHEDULES_TOKEN" |
+        curl --config - --fail --silent --show-error --max-time 30 \
+          "$CS_API_URL/projects/$CI_PROJECT_ID/issues/$iid" > "$work_dir/issue.json"
+      jq -j '.description // ""' "$work_dir/issue.json" > "$work_dir/issue-$iid.md"
+
+      if ! command -v canned-schedules-companion >/dev/null; then
+        command -v gpg >/dev/null || apk add --no-cache --quiet gnupg
+
+        case $(uname -m) in
+          x86_64) arch=x86_64 ;;
+          aarch64) arch=arm64 ;;
+          armv7l) arch=armv7 ;;
+          *) fail "no release for $(uname -m)" ;;
+        esac
+
+        archive=canned-schedules-companion_${CS_VERSION}_linux_${arch}.tar.gz
+        release=https://github.com/iilei/canned-schedules-companion/releases/download/v$CS_VERSION
+        bin_dir=$(mktemp -d)
+
+        for file in "$archive" checksums.txt checksums.txt.sig release-key.asc; do
+          curl --fail --silent --show-error --location --max-time 120 --output "$bin_dir/$file" "$release/$file"
+        done
+
+        GNUPGHOME=$(mktemp -d)
+        export GNUPGHOME
+        gpg --batch --quiet --import "$bin_dir/release-key.asc"
+        gpg --batch --status-fd 1 --verify "$bin_dir/checksums.txt.sig" "$bin_dir/checksums.txt" 2>/dev/null |
+          grep -q "^\[GNUPG:\] VALIDSIG .* $CS_RELEASE_KEY\$" || fail 'the release signature is not valid'
+        (cd "$bin_dir" && awk -v f="$archive" '$2 == f' checksums.txt | sha256sum -c -s -) ||
+          fail 'the download does not match checksums.txt'
+
+        tar -xzf "$bin_dir/$archive" -C "$bin_dir" canned-schedules-companion
+        PATH=$bin_dir:$PATH
+      fi
+
+      set --
+      if [ -n "$CS_ARGS_FILE" ] && [ -f "$CI_PROJECT_DIR/$CS_ARGS_FILE" ]; then
+        while IFS= read -r line || [ -n "$line" ]; do
+          line=${line%"$(printf '\r')"}
+          case $line in '' | '#'*) continue ;; esac
+          set -- "$@" "$line"
+        done < "$CI_PROJECT_DIR/$CS_ARGS_FILE"
+      fi
+
+      out_dir=$CI_PROJECT_DIR/canned-schedule-promotion
+      rc=0
+      (cd "$work_dir" && canned-schedules-companion promote prepare "$@" --catalog-dir "$CS_CATALOG_DIR" \
+        --out-dir "$out_dir" "issue-$iid.md") || rc=$?
+      [ "$rc" -le 1 ] || exit "$rc"
+
+      set -- --forge gitlab --repo "$CI_PROJECT_ID" --issue "$iid" --base-branch "$CS_BASE_BRANCH" \
+        --branch-prefix "$CS_BRANCH_PREFIX" --approved-label "$CS_APPROVED_LABEL" --api-url "$CS_API_URL" \
+        --token-env CANNED_SCHEDULES_TOKEN
+      if [ "$CS_DRY_RUN" = true ]; then set -- "$@" --dry-run; fi
+      canned-schedules-companion promote open "$@" "$out_dir"
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - canned-schedule-promotion/
