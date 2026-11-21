@@ -215,7 +215,7 @@ issue preview's `CANNED_SCHEDULES_TOKEN`, with the Developer role to label and r
 ```yaml
 include:
   - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.1/templates/review.yml
-    integrity: sha256-<see the release notes>
+    integrity: sha256-8j7ssQECUZTjFmSkg9Y4kQWNd13yKEsN/Ec7x+u23D0=
 ```
 
 Merge requests from forks run their pipelines in the fork, where the variable isn't set; let the project run fork
