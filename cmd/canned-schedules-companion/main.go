@@ -109,7 +109,7 @@ func previewRender(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 
-	res, err := preview.Render(src, file, opts, fiddle)
+	res, err := preview.Render(src, file, opts, fiddle, "canned-schedules-companion@"+ownVersion())
 	if err != nil {
 		fmt.Fprintln(stderr, "canned-schedules-companion:", err)
 

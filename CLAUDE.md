@@ -23,9 +23,29 @@ talks to a forge lives here.
   is missing from the library, it is added there as a compatible change, never worked around here.
 - **Step 1 files and layout match the core's `examples/consumer` `schedule:check`:** `report.md`, `report.json`,
   `comment.md`, `schedule.json`, `schedule.txt`, `schedule.svg` (theme auto, no source embed); the comment is
-  `<!-- canned-schedules:issue-preview -->`, the Markdown report and, when valid, the text form in a tilde fence of
-  at least 8 (longer when the text holds a longer run). The example will call this binary instead of its shell.
+  the stamped marker (below), the Markdown report and, when valid, the text form in a tilde fence of
+  at least 8 (longer when the text holds a longer run). Only the marker line differs from `schedule:check`'s
+  plain `<!-- canned-schedules:issue-preview -->`. The example will call this binary instead of its shell.
   `preview render` removes the files of an earlier run first.
+- **Stamp, label and trigger (implemented 2026-11-21, core CLAUDE.md "Issue trigger and label"):**
+  - **The marker line is stamped:** `<!-- canned-schedules:issue-preview sha256=<request> tool=canned-schedules-companion@<version>
+    args=<options> -->` (`preview.Stamp`). `sha256` reads CRLF as LF (`BodyDigest`), because the text comes from the
+    event or the API; `args` hashes the effective options and the playground base (`ArgsDigest`), so spelling a flag
+    differently changes nothing. Forge steps match `preview.Marker`, which ends in a space, so old plain markers are
+    still found; they have no stamp and are rendered again once.
+  - **`preview post` stops early:** it reads the issue first and writes nothing when the text's digest differs from the
+    stamp (a newer edit's run posts instead); it leaves a comment with the same stamp alone (on GitLab without
+    uploading). A dry-run upsert finds the existing comment first, so the comparison needs no new client method.
+  - **`--label`** adds the label for a valid request and removes it for an invalid one (`report.json`'s
+    `summary.errors`), matched ignoring case as GitHub does. Both forges create a missing label (checked live on
+    GitLab CE 19.4.1 with a root token, 2026-11-21: create, up to date, invalid edit, stale run). The action's
+    `label` input defaults to `Schedule`; the component's `label` changed meaning from filter to managed label.
+  - **Trigger:** the README's workflow runs on `opened`, `reopened`, `edited` when the body contains `[!SCHEDULE`
+    (`contains()` ignores case) or the issue has the label. The component runs on open, reopen and description
+    changes (no longer on label changes, so its own label can't start it) and checks issues whose description
+    matches `[!schedule` (jq, case-insensitive) or that have the label.
+  - **Not yet:** silence for bodies with no directive (needs core `v0.3.2`'s `Result.HasDirectives`), then the
+    core's templates and example drop their label.
 - **Evaluation flags keep the core CLI's names and meaning** (`--require-base true|false` takes a value), so a
   `canned-schedules.args` line works here too.
 - **Exit codes:** 0 valid, 1 request errors (files still written), 2 usage or environment.

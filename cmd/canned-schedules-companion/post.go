@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -32,10 +33,26 @@ var (
 type links []preview.Link
 
 type postFlags struct {
-	forge, repo, apiURL, author, note, tokenEnv string
-	links                                       links
-	issue                                       int
-	dryRun                                      bool
+	forge, repo, apiURL, author, note, tokenEnv, label string
+	links                                              links
+	issue                                              int
+	dryRun                                             bool
+}
+
+// client is what post needs from a forge besides the comment itself.
+type client interface {
+	Issue(ctx context.Context, repo string, issue int) (*forge.Issue, error)
+	AddLabel(ctx context.Context, repo string, issue int, label string) error
+	RemoveLabel(ctx context.Context, repo string, issue int, label string) error
+}
+
+// target is one forge: its client, how it keeps the comment up to date, and how it builds the comment's body (which
+// may upload files, so it runs only when the comment changes).
+type target struct {
+	client client
+	upsert func(ctx context.Context, u *forge.Upsert) (*forge.Plan, error)
+	body   func(ctx context.Context) (string, error)
+	author string
 }
 
 func (l *links) String() string { return fmt.Sprint(*l) }
@@ -78,6 +95,16 @@ func post(f *postFlags, dir string, stdout io.Writer) error {
 		return fmt.Errorf("read the comment (run preview render first): %w", err)
 	}
 
+	stamp, ok := preview.ParseStamp(string(raw))
+	if !ok {
+		return fmt.Errorf("%s has no stamp: render it with this release's preview render", preview.Comment)
+	}
+
+	valid, err := readValid(dir)
+	if err != nil {
+		return err
+	}
+
 	token := os.Getenv(f.tokenEnv)
 	if token == "" {
 		return fmt.Errorf("%w: set %s", errToken, f.tokenEnv)
@@ -86,43 +113,148 @@ func post(f *postFlags, dir string, stdout io.Writer) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	var plan *forge.Plan
+	var t *target
 
 	if f.forge == forgeGitLab {
-		plan, err = postGitLab(ctx, f, dir, raw, token, stdout)
+		t, err = gitLabTarget(ctx, f, dir, raw, token, stdout)
 	} else {
-		plan, err = postGitHub(ctx, f, raw, token)
+		t = gitHubTarget(f, raw, token)
 	}
 
 	if err != nil {
 		return err
 	}
 
-	report(stdout, f, plan)
+	issue, err := t.client.Issue(ctx, f.repo, f.issue)
+	if err != nil {
+		return err
+	}
+
+	// A run that checked an older text must not overwrite what the run for the newer one posts.
+	if preview.BodyDigest([]byte(issue.Body)) != stamp.Body {
+		fmt.Fprintf(stdout, "the text of %s#%d changed since the check; the run for that change posts instead\n",
+			f.repo, f.issue)
+
+		return nil
+	}
+
+	if err := upsert(ctx, f, t, stamp, stdout); err != nil {
+		return err
+	}
+
+	return syncLabel(ctx, f, t.client, issue, valid, stdout)
+}
+
+// upsert leaves a comment with the same stamp alone: the same text, tool and options give the same comment. A
+// comment without a stamp (earlier releases) or with another one is rendered again.
+func upsert(ctx context.Context, f *postFlags, t *target, stamp preview.Stamp, stdout io.Writer) error {
+	u := &forge.Upsert{Repo: f.repo, Issue: f.issue, Marker: preview.Marker, Author: t.author, DryRun: true}
+
+	plan, err := t.upsert(ctx, u)
+	if err != nil {
+		return err
+	}
+
+	if old, ok := preview.ParseStamp(plan.Existing); ok && old == stamp && len(plan.Delete) == 0 {
+		fmt.Fprintf(stdout, "the comment on %s#%d is up to date: %s\n", f.repo, f.issue, plan.URL)
+
+		return nil
+	}
+
+	if u.Body, err = t.body(ctx); err != nil {
+		return err
+	}
+
+	if !f.dryRun {
+		u.DryRun = false
+
+		if plan, err = t.upsert(ctx, u); err != nil {
+			return err
+		}
+	}
+
+	report(stdout, f, t.author, plan)
 
 	return nil
 }
 
-func postGitHub(ctx context.Context, f *postFlags, raw []byte, token string) (*forge.Plan, error) {
-	body, err := preview.Body(raw, f.links, f.note, preview.GitHubMaxBody)
-	if err != nil {
-		return nil, err
+// syncLabel makes the label say whether the request is valid: added when it is, removed when it isn't. CI is the
+// only one that sets it, so it can serve as "holds a valid schedule".
+func syncLabel(ctx context.Context, f *postFlags, c client, issue *forge.Issue, valid bool, stdout io.Writer) error {
+	if f.label == "" {
+		return nil
 	}
 
+	// GitHub matches label names ignoring case; the name as the issue has it is the one to remove.
+	have := ""
+
+	for _, l := range issue.Labels {
+		if strings.EqualFold(l, f.label) {
+			have = l
+		}
+	}
+
+	verb := map[bool]string{true: "would ", false: ""}[f.dryRun]
+	where := fmt.Sprintf("%s#%d", f.repo, f.issue)
+
+	switch {
+	case valid && have == "":
+		fmt.Fprintf(stdout, "%s%s the label %s to %s\n", verb, pastOr(f.dryRun, "add", "added"), f.label, where)
+
+		if !f.dryRun {
+			return c.AddLabel(ctx, f.repo, f.issue, f.label)
+		}
+	case !valid && have != "":
+		fmt.Fprintf(stdout, "%s%s the label %s from %s\n", verb, pastOr(f.dryRun, "remove", "removed"), have, where)
+
+		if !f.dryRun {
+			return c.RemoveLabel(ctx, f.repo, f.issue, have)
+		}
+	}
+
+	return nil
+}
+
+// readValid reads whether the request is valid from the JSON report preview render wrote.
+func readValid(dir string) (bool, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, preview.ReportJSON)) //nolint:gosec // The directory is the caller's.
+	if err != nil {
+		return false, fmt.Errorf("read the report (run preview render first): %w", err)
+	}
+
+	var rep struct {
+		Summary *struct {
+			Errors *int `json:"errors"`
+		} `json:"summary"`
+	}
+
+	if err := json.Unmarshal(raw, &rep); err != nil || rep.Summary == nil || rep.Summary.Errors == nil {
+		return false, fmt.Errorf("%s has no summary.errors: not written by preview render", preview.ReportJSON)
+	}
+
+	return *rep.Summary.Errors == 0, nil
+}
+
+func gitHubTarget(f *postFlags, raw []byte, token string) *target {
 	c := &github.Client{
 		HTTP: http.DefaultClient, BaseURL: f.apiURL, Token: token,
 		UserAgent: "canned-schedules-companion/" + ownVersion(),
 	}
 
-	return c.UpsertComment(ctx, &forge.Upsert{
-		Repo: f.repo, Issue: f.issue, Marker: preview.Marker, Author: f.author, Body: body, DryRun: f.dryRun,
-	})
+	return &target{
+		client: c,
+		upsert: c.UpsertComment,
+		body: func(context.Context) (string, error) {
+			return preview.Body(raw, f.links, f.note, preview.GitHubMaxBody)
+		},
+		author: f.author,
+	}
 }
 
-// postGitLab uploads the week, when the request has one, and shows it inline in the note.
-func postGitLab(ctx context.Context, f *postFlags, dir string, raw []byte, token string,
+// gitLabTarget uploads the week, when the request has one, and shows it inline in the note.
+func gitLabTarget(ctx context.Context, f *postFlags, dir string, raw []byte, token string,
 	stdout io.Writer,
-) (*forge.Plan, error) {
+) (*target, error) {
 	c := &gitlab.Client{
 		HTTP: http.DefaultClient, BaseURL: f.apiURL, Token: token,
 		UserAgent: "canned-schedules-companion/" + ownVersion(),
@@ -141,29 +273,27 @@ func postGitLab(ctx context.Context, f *postFlags, dir string, raw []byte, token
 		return nil, fmt.Errorf("read the week: %w", err)
 	}
 
-	var image string
+	body := func(ctx context.Context) (string, error) {
+		var image string
 
-	switch {
-	case svg == nil:
-	case f.dryRun:
-		fmt.Fprintf(stdout, "would upload %s to %s\n", preview.UploadName(f.issue, svg), f.repo)
-	default:
-		if image, err = c.Upload(ctx, f.repo, preview.UploadName(f.issue, svg), svg); err != nil {
-			return nil, err
+		switch {
+		case svg == nil:
+		case f.dryRun:
+			fmt.Fprintf(stdout, "would upload %s to %s\n", preview.UploadName(f.issue, svg), f.repo)
+		default:
+			var err error
+			if image, err = c.Upload(ctx, f.repo, preview.UploadName(f.issue, svg), svg); err != nil {
+				return "", err
+			}
 		}
+
+		return preview.GitLabBody(raw, image, f.links, f.note, preview.GitLabMaxBody)
 	}
 
-	body, err := preview.GitLabBody(raw, image, f.links, f.note, preview.GitLabMaxBody)
-	if err != nil {
-		return nil, err
-	}
-
-	return c.UpsertNote(ctx, &forge.Upsert{
-		Repo: f.repo, Issue: f.issue, Marker: preview.Marker, Author: author, Body: body, DryRun: f.dryRun,
-	})
+	return &target{client: c, upsert: c.UpsertNote, body: body, author: author}, nil
 }
 
-func report(w io.Writer, f *postFlags, p *forge.Plan) {
+func report(w io.Writer, f *postFlags, author string, p *forge.Plan) {
 	verb := map[bool]string{true: "would ", false: ""}[f.dryRun]
 	where := fmt.Sprintf("%s#%d", f.repo, f.issue)
 
@@ -176,7 +306,7 @@ func report(w io.Writer, f *postFlags, p *forge.Plan) {
 
 	if len(p.Delete) > 0 {
 		fmt.Fprintf(w, "%s%s %d duplicate comment(s) by %s\n", verb, pastOr(f.dryRun, "delete", "deleted"),
-			len(p.Delete), f.author)
+			len(p.Delete), author)
 	}
 }
 
@@ -209,6 +339,8 @@ func parsePost(args []string, stderr io.Writer) (*postFlags, string, error) {
 		"GITLAB_TOKEN)")
 	fs.Var(&f.links, "link", "label=https://… shown under the comment (repeatable)")
 	fs.StringVar(&f.note, "note", "", "text in parentheses after the links")
+	fs.StringVar(&f.label, "label", "", "added to the issue when the request is valid, removed when it isn't "+
+		"(empty: leave labels alone)")
 	fs.BoolVar(&f.dryRun, "dry-run", false, "read the issue's comments and say what would change, but write nothing")
 
 	if err := fs.Parse(args); err != nil {
@@ -226,6 +358,8 @@ func parsePost(args []string, stderr io.Writer) (*postFlags, string, error) {
 		return nil, "", errors.New("--repo and --issue are required")
 	case explicitAuthor && strings.TrimSpace(f.author) == "":
 		return nil, "", errors.New("--author can't be empty")
+	case f.label != strings.TrimSpace(f.label) || strings.ContainsAny(f.label, "\r\n"):
+		return nil, "", errors.New("--label: one line without leading or trailing spaces")
 	case fs.NArg() != 1:
 		fmt.Fprint(stderr, usage)
 

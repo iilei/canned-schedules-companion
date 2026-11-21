@@ -31,7 +31,7 @@ func renderWithFiddle(t *testing.T, path, base string) (*preview.Result, []byte)
 		t.Fatal(err)
 	}
 
-	res, err := preview.Render(src, "request.md", &cs.Options{Preview: &cs.PreviewOptions{}}, u)
+	res, err := preview.Render(src, "request.md", &cs.Options{Preview: &cs.PreviewOptions{}}, u, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestFiddleLinkTooLong(t *testing.T) {
 
 	u, _ := preview.ParseFiddleBase("https://schedules.example.com/")
 
-	res, err := preview.Render([]byte(long), "request.md", &cs.Options{Preview: &cs.PreviewOptions{}}, u)
+	res, err := preview.Render([]byte(long), "request.md", &cs.Options{Preview: &cs.PreviewOptions{}}, u, "test")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -66,12 +66,10 @@ type comment struct {
 // UpsertComment finds the comments on the issue that start with u.Marker and were written by u.Author. It updates
 // the oldest and deletes the others, or creates the comment when there is none.
 func (c *Client) UpsertComment(ctx context.Context, u *Upsert) (*Plan, error) {
-	owner, name, ok := strings.Cut(u.Repo, "/")
-	if !ok || owner == "" || name == "" || strings.Contains(name, "/") {
-		return nil, fmt.Errorf("repo %q: %w", u.Repo, errRepo)
+	base, err := repoPath(u.Repo)
+	if err != nil {
+		return nil, err
 	}
-
-	base := "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(name)
 
 	marked, err := c.marked(ctx, base, u)
 	if err != nil {
@@ -81,6 +79,7 @@ func (c *Client) UpsertComment(ctx context.Context, u *Upsert) (*Plan, error) {
 	plan := &Plan{Action: ActionCreate}
 	if len(marked) > 0 {
 		plan.Action, plan.Update, plan.URL = ActionUpdate, marked[0].ID, marked[0].HTMLURL
+		plan.Existing = marked[0].Body
 		for _, m := range marked[1:] {
 			plan.Delete = append(plan.Delete, m.ID)
 		}
@@ -114,6 +113,65 @@ func (c *Client) UpsertComment(ctx context.Context, u *Upsert) (*Plan, error) {
 	}
 
 	return plan, nil
+}
+
+// Issue reads the issue's body and labels.
+func (c *Client) Issue(ctx context.Context, repo string, issue int) (*forge.Issue, error) {
+	base, err := repoPath(repo)
+	if err != nil {
+		return nil, err
+	}
+
+	var got struct {
+		Body   string `json:"body"`
+		Labels []struct {
+			Name string `json:"name"`
+		} `json:"labels"`
+	}
+
+	if err := c.do(ctx, http.MethodGet, base+"/issues/"+strconv.Itoa(issue), nil, &got); err != nil {
+		return nil, err
+	}
+
+	out := &forge.Issue{Body: got.Body}
+	for _, l := range got.Labels {
+		out.Labels = append(out.Labels, l.Name)
+	}
+
+	return out, nil
+}
+
+// AddLabel adds a label to the issue; GitHub creates the label when the repository doesn't have it yet.
+func (c *Client) AddLabel(ctx context.Context, repo string, issue int, label string) error {
+	base, err := repoPath(repo)
+	if err != nil {
+		return err
+	}
+
+	payload := map[string][]string{"labels": {label}}
+
+	return c.do(ctx, http.MethodPost, base+"/issues/"+strconv.Itoa(issue)+"/labels", payload, nil)
+}
+
+// RemoveLabel removes a label from the issue.
+func (c *Client) RemoveLabel(ctx context.Context, repo string, issue int, label string) error {
+	base, err := repoPath(repo)
+	if err != nil {
+		return err
+	}
+
+	path := base + "/issues/" + strconv.Itoa(issue) + "/labels/" + url.PathEscape(label)
+
+	return c.do(ctx, http.MethodDelete, path, nil, nil)
+}
+
+func repoPath(repo string) (string, error) {
+	owner, name, ok := strings.Cut(repo, "/")
+	if !ok || owner == "" || name == "" || strings.Contains(name, "/") {
+		return "", fmt.Errorf("repo %q: %w", repo, errRepo)
+	}
+
+	return "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(name), nil
 }
 
 // marked lists the issue's comments by u.Author that start with u.Marker, oldest first (the API's order).

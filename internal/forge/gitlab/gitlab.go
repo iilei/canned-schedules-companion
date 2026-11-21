@@ -34,6 +34,7 @@ var (
 	errRepo   = errors.New("want GROUP/PROJECT or a numeric project ID")
 	errUpload = errors.New("the answer names no file under " + uploadPrefix)
 	errUser   = errors.New("the token's user has no username")
+	errLabel  = errors.New("GitLab reads commas as separators, so a label can't contain one")
 )
 
 // Client calls the REST API with one token.
@@ -97,6 +98,7 @@ func (c *Client) UpsertNote(ctx context.Context, u *forge.Upsert) (*forge.Plan, 
 	plan := &forge.Plan{Action: forge.ActionCreate}
 	if len(marked) > 0 {
 		plan.Action, plan.Update, plan.URL = forge.ActionUpdate, marked[0].ID, noteURL(info.WebURL, marked[0].ID)
+		plan.Existing = marked[0].Body
 		for _, m := range marked[1:] {
 			plan.Delete = append(plan.Delete, m.ID)
 		}
@@ -129,6 +131,35 @@ func (c *Client) UpsertNote(ctx context.Context, u *forge.Upsert) (*forge.Plan, 
 	}
 
 	return plan, nil
+}
+
+// Issue reads the issue's description and labels.
+func (c *Client) Issue(ctx context.Context, repo string, issue int) (*forge.Issue, error) {
+	project, err := projectPath(repo)
+	if err != nil {
+		return nil, err
+	}
+
+	var got struct {
+		Description string   `json:"description"`
+		Labels      []string `json:"labels"`
+	}
+
+	if err := c.do(ctx, http.MethodGet, project+"/issues/"+strconv.Itoa(issue), nil, &got); err != nil {
+		return nil, err
+	}
+
+	return &forge.Issue{Body: got.Description, Labels: got.Labels}, nil
+}
+
+// AddLabel adds a label to the issue; GitLab creates the label when the project doesn't have it yet.
+func (c *Client) AddLabel(ctx context.Context, repo string, issue int, label string) error {
+	return c.label(ctx, repo, issue, "add_labels", label)
+}
+
+// RemoveLabel removes a label from the issue.
+func (c *Client) RemoveLabel(ctx context.Context, repo string, issue int, label string) error {
+	return c.label(ctx, repo, issue, "remove_labels", label)
 }
 
 // Upload stores a file in the project and returns its path, relative to the project, for use in a note.
@@ -169,6 +200,20 @@ func (c *Client) Upload(ctx context.Context, repo, name string, data []byte) (st
 	}
 
 	return got.URL, nil
+}
+
+func (c *Client) label(ctx context.Context, repo string, issue int, field, label string) error {
+	// The API reads these fields as comma-separated lists.
+	if strings.Contains(label, ",") {
+		return fmt.Errorf("label %q: %w", label, errLabel)
+	}
+
+	project, err := projectPath(repo)
+	if err != nil {
+		return err
+	}
+
+	return c.do(ctx, http.MethodPut, project+"/issues/"+strconv.Itoa(issue), map[string]string{field: label}, nil)
 }
 
 // marked lists the issue's notes by u.Author that start with u.Marker, oldest first. System notes ("closed the

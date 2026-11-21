@@ -4,8 +4,9 @@ branding:
   icon: calendar
   color: green
 
-# The caller sets the trigger, the label condition, concurrency per issue and the permissions (contents: read,
-# issues: write). Inputs reach the shell only through environment variables, never through ${{ }} inside a script.
+# The caller sets the trigger (a schedule directive in the body, or the label), concurrency per issue and the
+# permissions (contents: read, issues: write). Inputs reach the shell only through environment variables, never
+# through ${{ }} inside a script.
 inputs:
   body-file:
     description: The issue body as a file. Write it from an environment variable, never by interpolating it.
@@ -34,6 +35,9 @@ inputs:
   comment-author:
     description: The login behind the token. Only its comments count as this step's own.
     default: github-actions[bot]
+  label:
+    description: Added to the issue when the request is valid, removed when it isn't, so it means "holds a valid schedule". Empty leaves labels alone.
+    default: Schedule
   dry-run:
     description: true reads the issue's comments and says what would change, but writes no comment. The files are still uploaded.
     default: "false"
@@ -172,6 +176,7 @@ runs:
         VERSION: ${{ inputs.version }}
         ISSUE: ${{ inputs.issue }}
         AUTHOR: ${{ inputs.comment-author }}
+        LABEL: ${{ inputs.label }}
         RETENTION_DAYS: ${{ inputs.retention-days }}
         DRY_RUN: ${{ inputs.dry-run }}
         OUT_DIR: ${{ steps.setup.outputs.out-dir }}
@@ -188,6 +193,7 @@ runs:
           --author "$AUTHOR"
           --note "kept for $RETENTION_DAYS days; downloading needs a GitHub login"
         )
+        if [[ -n $LABEL ]]; then flags+=(--label "$LABEL"); fi
         if [[ -n $SVG_URL ]]; then flags+=(--link "Week as SVG=$SVG_URL"); fi
         flags+=(--link "All files=$FILES_URL")
         if [[ $DRY_RUN == true ]]; then flags+=(--dry-run); fi
