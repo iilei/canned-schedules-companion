@@ -113,9 +113,11 @@ func SiteJSON(o *Options) ([]byte, error) {
 
 	switch o.Forge {
 	case GitLab:
+		// GitLab's edit page drops ?content=: its editor loads the stored file through the API. So the page
+		// copies the schedule and opens the edit page, as on GitHub.
 		s.Propose = propose{
 			Create: base + "/-/new/" + branch + "?file_name={path}&content={content}",
-			Update: base + "/-/edit/" + branch + "/{path}?content={content}",
+			Update: map[string]any{"url": base + "/-/edit/" + branch + "/{path}", "prefill": false},
 			Issue:  base + "/-/issues/new?issue[title]={name}&issue[description]={content}",
 		}
 

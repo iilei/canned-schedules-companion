@@ -41,7 +41,6 @@ func TestSiteJSONGitLab(t *testing.T) {
 	s := string(raw)
 	for _, want := range []string{
 		`"create": "https://gitlab.example.com/acme/ops/catalog/-/new/release/main?file_name={path}&content={content}"`,
-		`"update": "https://gitlab.example.com/acme/ops/catalog/-/edit/release/main/{path}?content={content}"`,
 		`"issue": "https://gitlab.example.com/acme/ops/catalog/-/issues/new?issue[title]={name}&issue[description]={content}"`,
 		`"fork": "https://gitlab.example.com/acme/ops/catalog/-/forks/new"`,
 		`"dir": "schedules"`, `"name": "Acme schedules"`,
@@ -49,6 +48,12 @@ func TestSiteJSONGitLab(t *testing.T) {
 		if !strings.Contains(s, want) {
 			t.Errorf("missing %s in\n%s", want, s)
 		}
+	}
+
+	// GitLab's editor loads the stored file and drops ?content=: copy, then open.
+	u := decode(t, raw)["propose"].(map[string]any)["update"].(map[string]any)
+	if u["prefill"] != false || u["url"] != "https://gitlab.example.com/acme/ops/catalog/-/edit/release/main/{path}" {
+		t.Errorf("update %v", u)
 	}
 }
 

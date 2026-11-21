@@ -150,7 +150,8 @@ Sets up a **self-hosted playground** for a catalog: it unpacks the core's prefli
 [canned-schedules release](https://github.com/iilei/canned-schedules/releases) attaches) into the directory and writes
 its `site.json`. Published on GitHub Pages or GitLab Pages, the page checks every schedule with the catalog's flags,
 and a valid schedule goes straight to the forge: **Propose new schedule** opens the new-file page with the file named
-after the schedule's title, **Propose change** the edit page of a schedule the catalog has, **Open as issue** a new
+after the schedule's title, **Propose change** copies the schedule and opens the edit page of a schedule the catalog has (neither forge
+prefills an existing file), **Open as issue** a new
 issue (see "Your own playground" in the core's README).
 
 The command is local: it reads files and writes files, nothing else. Download the zip first and verify it (the GPG
