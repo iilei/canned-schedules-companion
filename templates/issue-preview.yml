@@ -17,7 +17,7 @@ spec:
       description: The job's image. An image that already contains the binary, curl and jq skips the download.
       default: alpine:3.22
     label:
-      description: Only issues with this label are checked. Empty means every issue.
+      description: Added to an issue whose schedule is valid, removed when it isn't; issues with it are checked too. Empty leaves labels alone.
       default: Schedule
     api-url:
       description: The REST API as a job reaches it.
@@ -81,8 +81,9 @@ canned-schedule-preview:
       case $kind:$action in
         issue:open | issue:reopen) ;;
         issue:update)
-          # Closing an issue or assigning someone is an update too, but only these two can change the result.
-          if ! jq -e '(.changes // {}) | has("description") or has("labels")' "$TRIGGER_PAYLOAD" >/dev/null; then
+          # Closing an issue, assigning someone or changing labels is an update too, but only the description can
+          # change the result. Skipping label changes also keeps the job's own label from starting it again.
+          if ! jq -e '(.changes // {}) | has("description")' "$TRIGGER_PAYLOAD" >/dev/null; then
             echo "Nothing to do for this event."
             exit 0
           fi
@@ -105,9 +106,12 @@ canned-schedule-preview:
       work_dir=$(mktemp -d)
       api_get > "$work_dir/issue.json"
 
-      if [ -n "$CS_LABEL" ] &&
-        ! jq -e --arg label "$CS_LABEL" 'any(.labels[]?; . == $label)' "$work_dir/issue.json" >/dev/null; then
-        echo "Issue $iid doesn't have the label, so there is nothing to do."
+      # Checked: a description with a schedule directive, or an issue with the label (so an edit that removes the
+      # schedule still takes the label off).
+      if ! jq -e --arg label "$CS_LABEL" \
+        '((.description // "") | test("\\[!schedule"; "i")) or ($label != "" and any(.labels[]?; . == $label))' \
+        "$work_dir/issue.json" >/dev/null; then
+        echo "Issue $iid holds no schedule, so there is nothing to do."
         exit 0
       fi
 
@@ -174,6 +178,7 @@ canned-schedule-preview:
       case $CI_JOB_URL in
         https://*) set -- "$@" --link "All files=$CI_JOB_URL/artifacts/browse" ;;
       esac
+      if [ -n "$CS_LABEL" ]; then set -- "$@" --label "$CS_LABEL"; fi
       if [ "$CS_DRY_RUN" = true ]; then set -- "$@" --dry-run; fi
       canned-schedules-companion preview post "$@" "$out_dir"
 

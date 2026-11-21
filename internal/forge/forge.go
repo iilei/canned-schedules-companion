@@ -13,10 +13,20 @@ type Plan struct {
 	Action string
 	// URL is the comment's page; empty for a create in a dry run.
 	URL string
+	// Existing is the body of the comment to update, as the forge returned it (empty for a create).
+	Existing string
 	// Delete lists further marked comments by the author, removed as duplicates.
 	Delete []int64
 	// Update is the comment updated (0 for a create).
 	Update int64
+}
+
+// Issue is what a step reads from an issue: its text and its labels.
+type Issue struct {
+	// Body is the description as the forge stores it.
+	Body string
+	// Labels are the label names.
+	Labels []string
 }
 
 // Upsert describes one comment to keep up to date.

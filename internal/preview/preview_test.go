@@ -19,7 +19,7 @@ func render(t *testing.T, path string) *preview.Result {
 		t.Fatal(err)
 	}
 
-	res, err := preview.Render(src, "request.md", &cs.Options{Preview: &cs.PreviewOptions{}}, nil)
+	res, err := preview.Render(src, "request.md", &cs.Options{Preview: &cs.PreviewOptions{}}, nil, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,8 +42,15 @@ func TestValidRequest(t *testing.T) {
 	}
 
 	c := string(res.Files[preview.Comment])
-	if !strings.HasPrefix(c, preview.Marker+"\n") {
-		t.Errorf("the comment must start with the marker: %.80q", c)
+
+	src, err := os.ReadFile("../../testdata/office-hours.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stamp, ok := preview.ParseStamp(c)
+	if !ok || stamp.Body != preview.BodyDigest(src) || stamp.Tool != "test" || len(stamp.Args) != 64 {
+		t.Errorf("the comment must start with the stamped marker: %.160q", c)
 	}
 
 	// The text form sits inside an 8-tilde fence, exactly as the consumer example's schedule:check writes it.
@@ -73,7 +80,7 @@ func TestInvalidRequest(t *testing.T) {
 	}
 
 	c := string(res.Files[preview.Comment])
-	if !strings.HasPrefix(c, preview.Marker+"\n") || !strings.Contains(c, "invalid-name") {
+	if _, ok := preview.ParseStamp(c); !ok || !strings.Contains(c, "invalid-name") {
 		t.Errorf("the comment must carry the marker and the error:\n%s", c)
 	}
 

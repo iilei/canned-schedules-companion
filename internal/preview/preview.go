@@ -10,10 +10,6 @@ import (
 	cs "github.com/iilei/canned-schedules"
 )
 
-// Marker is the comment's first line. Forge steps find their earlier comment by it (and by the bot author); the
-// step-specific key keeps later steps' comments apart.
-const Marker = "<!-- canned-schedules:issue-preview -->"
-
 // File names in the output directory, the same as the consumer example's schedule:check task.
 const (
 	ReportMarkdown = "report.md"
@@ -39,9 +35,10 @@ type Result struct {
 
 // Render evaluates src (named file in the reports) with opts, which must plan a preview (opts.Preview). With a
 // fiddle base (opt-in: a preflight page the team hosts), the comment links to it with the document: the canonical
-// form of a valid request, the request as written otherwise, so the playground shows its errors at their lines. The
-// error is only for unusable options or a rendering bug; document problems are in the reports and the comment.
-func Render(src []byte, file string, opts *cs.Options, fiddle *url.URL) (*Result, error) {
+// form of a valid request, the request as written otherwise, so the playground shows its errors at their lines.
+// tool names the program and its version in the comment's stamp. The error is only for unusable options or a
+// rendering bug; document problems are in the reports and the comment.
+func Render(src []byte, file string, opts *cs.Options, fiddle *url.URL, tool string) (*Result, error) {
 	r, err := cs.Evaluate(src, opts)
 	if err != nil {
 		return nil, err
@@ -72,7 +69,8 @@ func Render(src []byte, file string, opts *cs.Options, fiddle *url.URL) (*Result
 		}
 	}
 
-	res.Files[Comment] = comment(res.Files[ReportMarkdown], res.Files[ScheduleText])
+	stamp := Stamp{Body: BodyDigest(src), Tool: toolName(tool), Args: ArgsDigest(opts, fiddle)}
+	res.Files[Comment] = comment(stamp, res.Files[ReportMarkdown], res.Files[ScheduleText])
 
 	if fiddle != nil {
 		doc := src
@@ -89,12 +87,12 @@ func Render(src []byte, file string, opts *cs.Options, fiddle *url.URL) (*Result
 	return res, nil
 }
 
-// comment is the marker, the report and, for a valid request, the text form inside a fence, so nothing in it
+// comment is the stamped marker, the report and, for a valid request, the text form inside a fence, so nothing in it
 // renders as Markdown. A forge step may append links to the files it uploaded.
-func comment(report, text []byte) []byte {
+func comment(stamp Stamp, report, text []byte) []byte {
 	var b bytes.Buffer
 
-	b.WriteString(Marker + "\n")
+	b.WriteString(stamp.Line() + "\n")
 	b.Write(report)
 
 	if text != nil {

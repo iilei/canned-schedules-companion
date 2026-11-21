@@ -91,17 +91,27 @@ issue's comments, takes those that start with the marker **and** were written by
 `github-actions[bot]`, the workflow token's account), updates the oldest and deletes the others; with none, it
 creates the comment. A marker someone pasted into their own comment is never touched.
 
+The marker line records what the comment was rendered from: a hash of the request, the companion's version and a hash
+of the options. When the comment already carries the same, `preview post` leaves it alone (on GitLab it uploads
+nothing either), so events that don't change the request, such as a new title, cost no writes. Before writing, it
+reads the issue again: when the text has changed since `preview render` read it, it writes nothing, and the run for
+the newer text posts instead. Comments from earlier releases have no such record and are rendered again once.
+
+With `--label`, the label says whether the request is valid: added when it is, removed when it isn't. Only CI should
+set it, so it means "holds a valid schedule".
+
 | Flag                        | Meaning                                                                         |
 | --------------------------- | ------------------------------------------------------------------------------- |
 | `--link label=URL`          | a link under the comment, e.g. to an uploaded artifact (repeatable, https only) |
 | `--note text`               | text in parentheses after the links                                             |
+| `--label name`              | added to the issue when the request is valid, removed when it isn't             |
 | `--author login`            | whose comments count as the step's own (locally: your login)                    |
 | `--token-env NAME`          | the variable holding the token (default `GITHUB_TOKEN` or `GITLAB_TOKEN`)       |
 | `--api-url URL`             | the REST API, for self-hosted forges (default: github.com's or gitlab.com's)    |
 | `--dry-run`                 | read the comments and say what would change, but write nothing                  |
 
 A comment longer than GitHub's 65,536 characters becomes a short notice plus the links. The token needs only the
-`issues: write` permission. Locally:
+`issues: write` permission (labels included). Locally:
 
 ```sh
 GITHUB_TOKEN=$(gh auth token) canned-schedules-companion preview post --forge github \
@@ -117,7 +127,7 @@ step's own when the token's user wrote them, unless `--author` says otherwise.
 
 Use a project access token with the `api` scope and the **Planner** role. Guest also works, except on confidential
 issues, which it can't see. With `read_api`, only `--dry-run` works. `CI_JOB_TOKEN` can neither write notes nor upload
-files. Every update uploads the week again, and earlier uploads stay in the project.
+files. Every changed note uploads the week again, and earlier uploads stay in the project.
 
 ```sh
 GITLAB_TOKEN=glpat-… canned-schedules-companion preview post --forge gitlab \
@@ -151,8 +161,10 @@ inline. GitLab can't start a pipeline from an issue event by itself, so a webhoo
 
    GitLab rejects the file if it doesn't match `integrity`. Inputs go under `inputs:` of the same entry.
 
-The job runs when an issue with the `Schedule` label is opened or reopened, and when its description or labels change.
-It reads the text from the API, not from the event. A request with errors gets its note, and the job then fails. The
+The job runs when an issue is opened or reopened and when its description changes, and checks it when the description
+holds a schedule directive (`[!SCHEDULE`, any case) or the issue has the label. It reads the text from the API, not from
+the event. It adds the label to an issue with a valid schedule and removes it otherwise; label changes alone don't start
+it, so its own label doesn't either. A request with errors gets its note, and the job then fails. The
 job keeps its files as artifacts under `canned-schedule-preview/`, for further jobs of your own. They include the request
 as GitLab stores it, named after its origin, for example `acme-catalog-issue-12.md` or `acme-catalog-task-13.md`.
 
@@ -163,7 +175,7 @@ as GitLab stores it, named after its origin, for example `acme-catalog-issue-12.
 | `stage`                | the job's stage                                                                  | `test`           |
 | `version`              | the release to install; its signature and checksum are verified                  | this file's      |
 | `image`                | the job's image; one with the binary, `curl` and `jq` skips the download         | `alpine:3.22`    |
-| `label`                | only issues with this label are checked; empty means every issue                 | `Schedule`       |
+| `label`                | added when the schedule is valid, removed when not; empty leaves labels alone    | `Schedule`       |
 | `api-url`              | the REST API as a job reaches it                                                 | `$CI_API_V4_URL` |
 | `args`                 | evaluation flags, one argument per line, as in `canned-schedules.args`           |                  |
 | `fiddle-link-base-uri` | a preflight page you host, linked from the note                                  | no link          |
@@ -182,7 +194,7 @@ name: schedule request
 
 on:
   issues:
-    types: [opened, edited]
+    types: [opened, reopened, edited]
 
 permissions:
   contents: read
@@ -193,7 +205,8 @@ concurrency:
 
 jobs:
   preview:
-    if: contains(github.event.issue.labels.*.name, 'Schedule')
+    # A schedule directive in the body (contains() ignores case), or the label the action keeps up to date.
+    if: contains(github.event.issue.body, '[!SCHEDULE') || contains(github.event.issue.labels.*.name, 'Schedule')
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
@@ -222,6 +235,7 @@ jobs:
 | `retention-days`       | how many days the uploaded files are kept                                               | `30`                  |
 | `token`                | reads and writes the issue's comments                                                   | `github.token`        |
 | `comment-author`       | the login behind `token`                                                                | `github-actions[bot]` |
+| `label`                | added when the request is valid, removed when not; empty leaves labels alone            | `Schedule`            |
 | `dry-run`              | `true` writes no comment but says what would change; the files are still uploaded       | `false`               |
 
 Outputs: `valid` (`true` or `false`), `out-dir`, `svg-url` (valid requests only) and `files-url`.

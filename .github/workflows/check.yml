@@ -74,6 +74,7 @@ jobs:
           body-file: testdata/office-hours.md
           version: 0.1.0 # The newest release; action.yml's default may name the one being prepared.
           issue: 11
+          label: "" # 0.1.0 has no --label; drop this once the newest release has it.
           args: |
             # Skipped, like the blank line below.
 
@@ -88,6 +89,7 @@ jobs:
           body-file: testdata/invalid-name.md
           version: 0.1.0 # The newest release; action.yml's default may name the one being prepared.
           issue: 11
+          label: "" # 0.1.0 has no --label; drop this once the newest release has it.
           dry-run: true
 
       # mise only, no tools: the task needs none.

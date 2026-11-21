@@ -82,8 +82,10 @@ func GitLabBody(comment []byte, image string, links []Link, note string, limit i
 
 func body(comment []byte, image string, links []Link, note string, limit int, size func(string) int) (string, error) {
 	c := string(comment)
-	if !strings.HasPrefix(c, Marker+"\n") {
-		return "", fmt.Errorf("%s doesn't start with the marker %s: not written by preview render", Comment, Marker)
+
+	head, _, ok := strings.Cut(c, "\n")
+	if _, stamped := ParseStamp(c); !ok || !stamped {
+		return "", fmt.Errorf("%s doesn't start with a stamped marker: not written by preview render", Comment)
 	}
 
 	tail := imageLine(image) + linkLine(links, note)
@@ -93,7 +95,7 @@ func body(comment []byte, image string, links []Link, note string, limit int, si
 		return full, nil
 	}
 
-	short := Marker + "\n" + tooLong + tail
+	short := head + "\n" + tooLong + tail
 	if size(short) > limit {
 		return "", fmt.Errorf("even the short comment has size %d, more than the limit of %d", size(short), limit)
 	}
