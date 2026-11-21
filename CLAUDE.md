@@ -60,6 +60,15 @@ talks to a forge lives here.
   kept readable (fieldalignment exemptions). Downloading and verifying the zip and publishing stay with the wrappers
   (next: the GitLab component with a `pages` job, then the Action); the binary never touches the network. Checked
   with the real `v0.3.3` zip, verified against `checksums.txt` and its signature.
+- **GitLab Pages playground (implemented 2026-11-21):** `templates/playground.yml`, a job named `pages` (GitLab
+  publishes that job's `public/`) on pipelines of the default branch, so `site.json` follows every merge. It installs
+  the companion like the issue preview does, reads the core version from `--version` (`site-version` overrides),
+  downloads the core's site zip from that release and verifies both downloads with one helper (`fetch_verified`:
+  signature on `checksums.txt` against the pinned fingerprint, then the file's hash; both projects share the release
+  key), then runs `playground build --forge gitlab` with `$CI_SERVER_URL`, `$CI_PROJECT_PATH` and
+  `$CI_DEFAULT_BRANCH` (inputs), `--no-catalog` when the folder is missing and `--args-file` only when the file
+  exists. No token, no webhook. `action:version` checks its default version and the README's include (tag and
+  integrity) like the issue preview's. The project can't have its own `pages` job next to it.
 - **Evaluation flags keep the core CLI's names and meaning** (`--require-base true|false` takes a value), so a
   `canned-schedules.args` line works here too.
 - **Exit codes:** 0 valid, 1 request errors (files still written), 2 usage or environment.
@@ -181,6 +190,7 @@ talks to a forge lives here.
 
 - `action.yml`: the composite GitHub Action (step 1).
 - `templates/issue-preview.yml`: the GitLab CI/CD component (step 1).
+- `templates/playground.yml`: the GitLab component that publishes the self-hosted playground on Pages.
 - `cmd/canned-schedules-companion`: the binary, flag parsing, input reading, atomic writes, exit codes.
 - `internal/playground`: `playground build`'s local part (`SiteJSON`, `ReadArgs`, `Names`), pure.
 - `internal/preview`: step 1's local part (`Render`, `Body`, `ParseLink`, `ParseFiddleBase`, `FiddleLink`), pure.

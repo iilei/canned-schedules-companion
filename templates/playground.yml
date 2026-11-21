@@ -1,0 +1,146 @@
+# Publishes a self-hosted playground for the catalog on GitLab Pages: the core's preflight page, set up with a
+# site.json for this project, so a valid schedule goes from the editor straight to a merge request or an issue.
+#
+# The job runs on the default branch, so site.json lists the catalog's schedules as they are after every merge. It
+# downloads the companion and the core's site zip, verifies both with GPG against the pinned release key, runs
+# `canned-schedules-companion playground build` and publishes public/. It needs no token.
+spec:
+  description: Publishes a self-hosted playground for the catalog on GitLab Pages.
+  inputs:
+    stage:
+      description: The stage of the job.
+      default: deploy
+    version:
+      description: The canned-schedules-companion release to install.
+      default: "0.3.0"
+      regex: ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$
+    site-version:
+      description: The canned-schedules release whose page to publish. Empty means the one the companion is built with, so the playground checks as the issue preview does.
+      default: ""
+      regex: ^([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)?$
+    image:
+      description: The job's image. An image that already contains the binary, curl and gnupg skips the downloads of tools.
+      default: alpine:3.22
+    server-url:
+      description: The project's web address as readers reach it, https only. Proposals open pages there.
+      default: $CI_SERVER_URL
+    branch:
+      description: The branch proposals target.
+      default: $CI_DEFAULT_BRANCH
+    catalog-dir:
+      description: The catalog's folder in the repository.
+      default: schedules
+    args-file:
+      description: The flags the catalog's CI checks with, as canned-schedules.args. A missing file means no flags.
+      default: canned-schedules.args
+    name:
+      description: Shown in the page's header. Empty means none.
+      default: ""
+    fork:
+      description: Link readers who aren't members to the project's fork page; GitLab's new-file and edit pages need a fork for them.
+      type: boolean
+      default: false
+    expire-in:
+      description: How long the job's files are kept.
+      default: 30 days
+---
+# GitLab publishes the artifacts of a job named pages.
+pages:
+  stage: $[[ inputs.stage ]]
+  image: $[[ inputs.image ]]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  variables:
+    CS_VERSION: $[[ inputs.version ]]
+    CS_SITE_VERSION: $[[ inputs.site-version ]]
+    CS_SERVER_URL: $[[ inputs.server-url ]]
+    CS_BRANCH: $[[ inputs.branch ]]
+    CS_CATALOG_DIR:
+      value: $[[ inputs.catalog-dir ]]
+      expand: false
+    CS_ARGS_FILE:
+      value: $[[ inputs.args-file ]]
+      expand: false
+    CS_NAME:
+      value: $[[ inputs.name ]]
+      expand: false
+    CS_FORK: $[[ inputs.fork ]]
+    # canned-schedules' release key, which signs the core's and the companion's releases.
+    CS_RELEASE_KEY: B645234C9CB8175ECA5D78A5C8447A2252E9E7B6
+  script:
+    - |
+      set -eu
+
+      fail() {
+        printf 'canned-schedules-playground: %s\n' "$1" >&2
+        exit 2
+      }
+
+      if ! command -v curl >/dev/null || ! command -v gpg >/dev/null; then
+        apk add --no-cache --quiet curl gnupg
+      fi
+
+      GNUPGHOME=$(mktemp -d)
+      export GNUPGHOME
+      key_imported=false
+
+      # fetch_verified <release base URL> <file> <dir>: downloads file with checksums.txt, checks the signature on
+      # checksums.txt against the release key, then the file against checksums.txt.
+      fetch_verified() {
+        for f in "$2" checksums.txt checksums.txt.sig release-key.asc; do
+          curl --fail --silent --show-error --location --max-time 120 --output "$3/$f" "$1/$f"
+        done
+        if [ "$key_imported" = false ]; then
+          gpg --batch --quiet --import "$3/release-key.asc"
+          key_imported=true
+        fi
+        gpg --batch --status-fd 1 --verify "$3/checksums.txt.sig" "$3/checksums.txt" 2>/dev/null |
+          grep -q "^\[GNUPG:\] VALIDSIG .* $CS_RELEASE_KEY\$" || fail "the signature on $1/checksums.txt is not valid"
+        (cd "$3" && awk -v f="$2" '$2 == f' checksums.txt | sha256sum -c -s -) ||
+          fail "$2 does not match checksums.txt"
+      }
+
+      if ! command -v canned-schedules-companion >/dev/null; then
+        case $(uname -m) in
+          x86_64) arch=x86_64 ;;
+          aarch64) arch=arm64 ;;
+          armv7l) arch=armv7 ;;
+          *) fail "no release for $(uname -m)" ;;
+        esac
+
+        archive=canned-schedules-companion_${CS_VERSION}_linux_${arch}.tar.gz
+        bin_dir=$(mktemp -d)
+        fetch_verified "https://github.com/iilei/canned-schedules-companion/releases/download/v$CS_VERSION" \
+          "$archive" "$bin_dir"
+        tar -xzf "$bin_dir/$archive" -C "$bin_dir" canned-schedules-companion
+        PATH=$bin_dir:$PATH
+      fi
+
+      # The page of the core the companion is built with, unless site-version names another.
+      site_version=$CS_SITE_VERSION
+      if [ -z "$site_version" ]; then
+        site_version=$(canned-schedules-companion --version | sed -n 's/.*(canned-schedules \([^)]*\))$/\1/p')
+      fi
+      case $site_version in
+        '' | dev | unknown) fail 'set site-version: the companion names no canned-schedules release' ;;
+      esac
+
+      site_dir=$(mktemp -d)
+      zip=canned-schedules-site_${site_version}.zip
+      fetch_verified "https://github.com/iilei/canned-schedules/releases/download/v$site_version" "$zip" "$site_dir"
+
+      set -- --site-zip "$site_dir/$zip" --forge gitlab --server-url "$CS_SERVER_URL" --project "$CI_PROJECT_PATH" \
+        --branch "$CS_BRANCH" --repo-root "$CI_PROJECT_DIR" --catalog-dir "$CS_CATALOG_DIR"
+      if [ -d "$CI_PROJECT_DIR/$CS_CATALOG_DIR" ]; then :; else set -- "$@" --no-catalog; fi
+      if [ -n "$CS_ARGS_FILE" ] && [ -f "$CI_PROJECT_DIR/$CS_ARGS_FILE" ]; then
+        set -- "$@" --args-file "$CI_PROJECT_DIR/$CS_ARGS_FILE"
+      fi
+      if [ -n "$CS_NAME" ]; then set -- "$@" --name "$CS_NAME"; fi
+      if [ "$CS_FORK" = true ]; then set -- "$@" --fork; fi
+
+      rm -rf "$CI_PROJECT_DIR/public"
+      canned-schedules-companion playground build "$@" "$CI_PROJECT_DIR/public"
+  artifacts:
+    expire_in: $[[ inputs.expire-in ]]
+    paths:
+      - public/
