@@ -244,7 +244,8 @@ talks to a forge lives here.
    request review attaches each changed schedule's generated files to the merge request (job artifacts on GitLab,
    workflow artifacts on GitHub), with each file's content hash; on merge, a publish action / component finds the merge
    request the pushed commit came from (works after squash and rebase merges), fetches its latest review files,
-   publishes a schedule only when the merged file's content hash equals the reviewed one, writes them with the raw
+   uses a schedule's reviewed files when the merged file's content hash equals the reviewed one and renders it again
+   otherwise (a rebase or any later edit; the provenance says which, with both hashes), writes them with the raw
    input and a provenance file (from the forge's records: the merge request with its creation and merge times, author
    and merger, the review run, path and content hash, tool versions, the review's stamp; no git dates) under a path
    from its inputs, and runs a user-provided post-fetch script (S3, Artifactory, a commit elsewhere). Local part:
