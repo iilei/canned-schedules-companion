@@ -242,11 +242,14 @@ talks to a forge lives here.
 
 1. **Step 3, publishing** (designed 2026-11-21 in the core's CLAUDE.md, "Step 3, publishing"; not built): the merge
    request review attaches each changed schedule's generated files to the merge request (job artifacts on GitLab,
-   workflow artifacts on GitHub); on merge, a publish action / component fetches the files of the merged head's review,
-   writes them with the raw input and a provenance file (merge request and review run, merge commit, author and date
-   of the commit that last changed the file, tool versions, the review's stamp) under a path from its inputs, and runs
-   a user-provided post-fetch script (S3, Artifactory, a commit elsewhere). Local part: verify the merged file
-   against the review's stamp and write the layout and provenance; forge part: find and download the review's files.
+   workflow artifacts on GitHub), with each file's content hash; on merge, a publish action / component finds the merge
+   request the pushed commit came from (works after squash and rebase merges), fetches its latest review files,
+   publishes a schedule only when the merged file's content hash equals the reviewed one, writes them with the raw
+   input and a provenance file (from the forge's records: the merge request with its creation and merge times, author
+   and merger, the review run, path and content hash, tool versions, the review's stamp; no git dates) under a path
+   from its inputs, and runs a user-provided post-fetch script (S3, Artifactory, a commit elsewhere). Local part:
+   compare content hashes and write the layout and provenance; forge part: find the merge request, download its
+   review's files.
    Open questions are listed there.
 2. **GitLab catalog, only if teams ask:** a project on gitlab.com for catalog search and the short `component:` syntax.
 3. **The screen recording** with the public demo repo
