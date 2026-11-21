@@ -201,8 +201,8 @@ inline. GitLab can't start a pipeline from an issue event by itself, so a webhoo
 
    ```yaml
    include:
-     - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.2.0/templates/issue-preview.yml
-       integrity: sha256-TwNPUKiLal+0nogu0vTfCZrIpYaUFEtVhsPmTe82f2Y=
+     - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.0/templates/issue-preview.yml
+       integrity: sha256-w5+Gpy+5Qp6s3uzM9FTMNLwUrPQWaz0Xj5ow2IQNifg=
    ```
 
    GitLab rejects the file if it doesn't match `integrity`. Inputs go under `inputs:` of the same entry.
