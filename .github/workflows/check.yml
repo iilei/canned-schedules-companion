@@ -105,6 +105,36 @@ jobs:
           INVALID_OUTCOME: ${{ steps.invalid.outcome }}
         run: mise run action:assert "$VALID_DIR" "$INVALID_DIR" "$VALID_OUTPUT" "$INVALID_OUTPUT" "$INVALID_OUTCOME"
 
+  # The playground action against the newest release: it downloads and verifies the site zip, builds the site with
+  # this repository as the catalog's project and uploads it as a Pages artifact (nothing is deployed).
+  playground:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: build
+        uses: ./playground
+        with:
+          version: 0.3.2 # The newest release; the action's default may name the one being prepared.
+          branch: main
+          catalog-dir: no-catalog-here
+          args-file: testdata/playground.args
+          name: Companion check
+
+      - env:
+          SITE_DIR: ${{ steps.build.outputs.site-dir }}
+        run: |
+          set -euo pipefail
+          test -f "$SITE_DIR/index.html"
+          jq -e '.name == "Companion check" and (.propose.create | startswith("https://github.com/"))
+            and .propose.update.prefill == false and .catalog.names == []
+            and .args == ["--error-unless-alert-pattern", "(?i)NOTE|TIP"]' "$SITE_DIR/site.json"
+
   # Every release archive, cross-compiled as the release would (no signing, no publishing): a dependency update merges
   # without a human, so it has to prove that all release targets still build.
   binaries:
