@@ -215,8 +215,8 @@ issue preview's `CANNED_SCHEDULES_TOKEN`, with the Developer role to label and r
 
 ```yaml
 include:
-  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.1/templates/review.yml
-    integrity: sha256-3CF1y1zQo117XM/wMfLIFP67pmNeQduvaHIktpFzQnI=
+  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.2/templates/review.yml
+    integrity: sha256-WNNbmG27YZC0sFEXf/6CE/XCw1MJgoiUyvZ3isC1vDA=
 ```
 
 Merge requests from forks run their pipelines in the fork, where the variable isn't set; let the project run fork
@@ -243,8 +243,8 @@ inline. GitLab can't start a pipeline from an issue event by itself, so a webhoo
 
    ```yaml
    include:
-     - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.1/templates/issue-preview.yml
-       integrity: sha256-vxBQa9Sd3Yvp5HAeCpL8Igk57l6MKlFRyhBTCWLp7wo=
+     - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.2/templates/issue-preview.yml
+       integrity: sha256-ar2IJUgnqiUKSOVo4dhR1RqhbRjXtTJtj4kwluUydTQ=
    ```
 
    GitLab rejects the file if it doesn't match `integrity`. Inputs go under `inputs:` of the same entry.
@@ -280,8 +280,8 @@ playground checks as the issue preview does), verifies both with GPG against the
 
 ```yaml
 include:
-  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.1/templates/playground.yml
-    integrity: sha256-Ywvz35MA3qorhf/LZvM3JGmTUFbuCqFXuLi1J3NDCsk=
+  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.2/templates/playground.yml
+    integrity: sha256-e7MS6FAr32WmTWy2q5GUehg7qx4ebL4oS3Z9ZeW2ALA=
     inputs:
       name: Acme schedules
       fork: true
