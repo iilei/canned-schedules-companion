@@ -69,6 +69,27 @@ talks to a forge lives here.
   `$CI_DEFAULT_BRANCH` (inputs), `--no-catalog` when the folder is missing and `--args-file` only when the file
   exists. No token, no webhook. `action:version` checks its default version and the README's include (tag and
   integrity) like the issue preview's. The project can't have its own `pages` job next to it.
+- **Merge request review (implemented 2026-11-21, GitLab first):** the step `review`, for merge requests from the
+  playground's proposals (core CLAUDE.md, "Self-hosted playground and proposals": the MR pipeline checks the changed
+  files, posts the report, sets the label, renames the MR from the H1).
+  - `review render [eval flags] file…` (`internal/review`): the core's check per file plus the catalog rule that a
+    file's name is `cannedschedules.FileName` of its H1 (core `v0.3.4`); one comment with an overview and a
+    `<details>` section per file (report, then the text form for a valid file). Paths outside
+    `[A-Za-z0-9._/-]` are reported without being echoed (user data in Markdown). `review.json` carries `valid` and the
+    names for the forge part. The marker is `<!-- canned-schedules:merge-request-review` with the issue preview's
+    stamp (`preview.Stamp.LineFor`); the body digest covers paths and contents.
+  - `review post --forge gitlab`: the GitLab client's notes take `forge.Upsert.MergeRequest` (`/merge_requests/`),
+    plus `MergeRequest`, merge request labels and `SetMergeRequestTitle`. Skips when the MR's head isn't
+    `--head-sha`; leaves a note with the same stamp alone; `--label` as for issues; `--retitle` only while the title
+    is the web editor's default (`review.DefaultTitle`: "Add new file", "Add|Update|Create|Edit|Delete
+    <…canned-schedule.md>"), to `Schedule: <name>` or `Schedules: a, b`. GitHub returns "not yet".
+  - `templates/review.yml`: merge request pipelines that change `catalog-dir/*.canned-schedule.md`, `GIT_DEPTH: 0`,
+    files from `git diff --diff-filter=ACMR` against `$CI_MERGE_REQUEST_DIFF_BASE_SHA`, flags from the args file at
+    that base commit (an MR can't loosen its own check). Needs `CANNED_SCHEDULES_TOKEN` with the Developer role.
+    Fork MRs run in the fork without the variable.
+  - Checked live on the local GitLab (`root/canned-schedules-demo` !1, run from the command line until a release has
+    it): note created, label added, "Add new file" renamed to "Schedule: Night Shift", a second run up to date, a
+    stale head writes nothing, a misnamed file reported.
 - **Evaluation flags keep the core CLI's names and meaning** (`--require-base true|false` takes a value), so a
   `canned-schedules.args` line works here too.
 - **Exit codes:** 0 valid, 1 request errors (files still written), 2 usage or environment.
@@ -193,6 +214,8 @@ talks to a forge lives here.
 - `templates/playground.yml`: the GitLab component that publishes the self-hosted playground on Pages.
 - `cmd/canned-schedules-companion`: the binary, flag parsing, input reading, atomic writes, exit codes.
 - `internal/playground`: `playground build`'s local part (`SiteJSON`, `ReadArgs`, `Names`), pure.
+- `internal/review`: the merge request review's local part (`Render`, `Title`, `DefaultTitle`), pure.
+- `templates/review.yml`: the GitLab component that reviews merge requests.
 - `internal/preview`: step 1's local part (`Render`, `Body`, `ParseLink`, `ParseFiddleBase`, `FiddleLink`), pure.
 - `internal/forge`: what the forge clients share.
 - `internal/forge/github`: the only code that talks to GitHub.

@@ -5,6 +5,8 @@
 //
 //	canned-schedules-companion preview render [flags] request.md
 //	canned-schedules-companion preview post --forge github|gitlab --repo OWNER/REPO --issue N [flags] dir
+//	canned-schedules-companion review render [flags] file...
+//	canned-schedules-companion review post --forge gitlab --repo P --merge-request N [flags] dir
 //	canned-schedules-companion playground build --site-zip zip --forge github|gitlab --project P --branch B [flags] dir
 //
 // Every step splits into local verbs (render, prepare, check), which read and write files only, and forge verbs
@@ -30,6 +32,9 @@ import (
 	"github.com/iilei/canned-schedules-companion/internal/preview"
 )
 
+// stepAndVerb is how many arguments name a command ("preview render").
+const stepAndVerb = 2
+
 const (
 	exitOK      = 0
 	exitInvalid = 1
@@ -50,16 +55,34 @@ const (
 const usage = `usage: canned-schedules-companion preview render [flags] request.md
        canned-schedules-companion preview post --forge github|gitlab --repo OWNER/REPO --issue N [flags] dir
        canned-schedules-companion playground build --site-zip zip --forge github|gitlab --project P --branch B [flags] dir
+       canned-schedules-companion review render [flags] file...
+       canned-schedules-companion review post --forge gitlab --repo P --merge-request N [flags] dir
        canned-schedules-companion --version
 `
 
 var errUsage = errors.New("usage")
+
+// commands are the steps' verbs, by "<step> <verb>".
+var commands = map[string]func(args []string, stdout, stderr io.Writer) int{
+	"preview render":   previewRender,
+	"preview post":     previewPost,
+	"playground build": playgroundBuild,
+	"review render":    reviewRender,
+	"review post":      reviewPost,
+}
 
 // version is set by goreleaser (-ldflags -X main.version=…); without it the module version is used.
 var version = ""
 
 // overrides collects repeatable --set-config-at / --set-config-value values.
 type overrides []string
+
+// evalFlags are the evaluation flags, with the core CLI's names and meaning, shared by the commands that check.
+type evalFlags struct {
+	at, values overrides
+	opts       cs.Options
+	downsample int
+}
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -75,12 +98,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprint(stdout, usage)
 
 		return exitOK
-	case len(args) >= 2 && args[0] == "preview" && args[1] == "render":
-		return previewRender(args[2:], stdout, stderr)
-	case len(args) >= 2 && args[0] == "preview" && args[1] == "post":
-		return previewPost(args[2:], stdout, stderr)
-	case len(args) >= 2 && args[0] == "playground" && args[1] == "build":
-		return playgroundBuild(args[2:], stdout, stderr)
+	case len(args) >= stepAndVerb:
+		if cmd, ok := commands[args[0]+" "+args[1]]; ok {
+			return cmd(args[stepAndVerb:], stdout, stderr)
+		}
 	}
 
 	fmt.Fprint(stderr, usage)
@@ -146,31 +167,8 @@ func parseRender(args []string, stderr io.Writer) (*cs.Options, string, string, 
 	fs := flag.NewFlagSet("preview render", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	var (
-		opts       cs.Options
-		at, values overrides
-		downsample int
-	)
-
+	ev := addEvalFlags(fs)
 	outDir := fs.String("out-dir", "canned-schedule-preview", "where the files go")
-	fs.IntVar(&opts.SampleInterval, "sample-interval", 1, "every time must be a multiple of it; must divide 60")
-	// A value, not a boolean flag, as in the core CLI: `--require-base true` must not read "true" as the file.
-	fs.Func("require-base", "true: the document must contain a BASE block (true or false)", func(s string) error {
-		switch s {
-		case "true", "false":
-			opts.RequireBase = s == "true"
-
-			return nil
-		}
-
-		return errors.New(`want "true" or "false"`)
-	})
-	fs.StringVar(&opts.Base, "base", "", "base state when the document has no BASE block")
-	fs.StringVar(&opts.AlertPattern, "error-unless-alert-pattern", "",
-		"every alert other than a schedule directive must match (Go syntax, anchored)")
-	fs.Var(&at, "set-config-at", "config path to replace (repeatable, paired with --set-config-value)")
-	fs.Var(&values, "set-config-value", "JSON value for the matching --set-config-at (repeatable)")
-	fs.IntVar(&downsample, "preview-downsample", cs.DefaultDownsample, "preview buckets in minutes; must divide 60")
 	fiddleRaw := fs.String("fiddle-link-base-uri", "", "opt-in: a preflight page you host; the comment links to it "+
 		"with the schedule in the URL fragment")
 	fiddleLock := fs.Bool("fiddle-link-lock", true, "lock the playground's settings (?lock=1), so the reader edits "+
@@ -180,15 +178,14 @@ func parseRender(args []string, stderr io.Writer) (*cs.Options, string, string, 
 		return nil, "", "", nil, errUsage
 	}
 
-	if len(at) != len(values) {
-		return nil, "", "", nil, fmt.Errorf("%d --set-config-at but %d --set-config-value: they must come in pairs",
-			len(at), len(values))
+	opts, err := ev.options()
+	if err != nil {
+		return nil, "", "", nil, err
 	}
 
 	var fiddle *url.URL
 
 	if *fiddleRaw != "" {
-		var err error
 		if fiddle, err = preview.ParseFiddleBase(*fiddleRaw); err != nil {
 			return nil, "", "", nil, err
 		}
@@ -196,19 +193,55 @@ func parseRender(args []string, stderr io.Writer) (*cs.Options, string, string, 
 		preview.LockFiddle(fiddle, *fiddleLock)
 	}
 
-	for i := range at {
-		opts.Config = append(opts.Config, cs.ConfigOverride{Path: at[i], Value: values[i]})
-	}
-
-	opts.Preview = &cs.PreviewOptions{Downsample: downsample}
-
 	if fs.NArg() != 1 {
 		fmt.Fprint(stderr, usage)
 
 		return nil, "", "", nil, errUsage
 	}
 
-	return &opts, *outDir, fs.Arg(0), fiddle, nil
+	return opts, *outDir, fs.Arg(0), fiddle, nil
+}
+
+func addEvalFlags(fs *flag.FlagSet) *evalFlags {
+	var e evalFlags
+
+	fs.IntVar(&e.opts.SampleInterval, "sample-interval", 1, "every time must be a multiple of it; must divide 60")
+	// A value, not a boolean flag, as in the core CLI: `--require-base true` must not read "true" as the file.
+	fs.Func("require-base", "true: the document must contain a BASE block (true or false)", func(s string) error {
+		switch s {
+		case "true", "false":
+			e.opts.RequireBase = s == "true"
+
+			return nil
+		}
+
+		return errors.New(`want "true" or "false"`)
+	})
+	fs.StringVar(&e.opts.Base, "base", "", "base state when the document has no BASE block")
+	fs.StringVar(&e.opts.AlertPattern, "error-unless-alert-pattern", "",
+		"every alert other than a schedule directive must match (Go syntax, anchored)")
+	fs.Var(&e.at, "set-config-at", "config path to replace (repeatable, paired with --set-config-value)")
+	fs.Var(&e.values, "set-config-value", "JSON value for the matching --set-config-at (repeatable)")
+	fs.IntVar(&e.downsample, "preview-downsample", cs.DefaultDownsample, "preview buckets in minutes; must divide 60")
+
+	return &e
+}
+
+// options pairs the overrides and plans the preview.
+func (e *evalFlags) options() (*cs.Options, error) {
+	if len(e.at) != len(e.values) {
+		return nil, fmt.Errorf("%d --set-config-at but %d --set-config-value: they must come in pairs",
+			len(e.at), len(e.values))
+	}
+
+	opts := e.opts
+	for i := range e.at {
+		opts.Config = append(opts.Config, cs.ConfigOverride{Path: e.at[i], Value: e.values[i]})
+	}
+
+	opts.Preview = &cs.PreviewOptions{Downsample: e.downsample}
+
+	return &opts, nil
 }
 
 // readInput opens file once, checks the opened file and reads at most maxInputBytes.

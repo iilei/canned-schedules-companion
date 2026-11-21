@@ -21,6 +21,16 @@ type Plan struct {
 	Update int64
 }
 
+// MergeRequest is what a step reads from a merge request (a pull request on GitHub).
+type MergeRequest struct {
+	// Title as the forge shows it.
+	Title string
+	// SHA is the head commit the merge request points at now.
+	SHA string
+	// Labels are the label names.
+	Labels []string
+}
+
 // Issue is what a step reads from an issue: its text and its labels.
 type Issue struct {
 	// Body is the description as the forge stores it.
@@ -39,8 +49,11 @@ type Upsert struct {
 	Author string
 	// Body is the full comment, marker included.
 	Body string
-	// Issue is the issue number as the forge shows it.
+	// Issue is the issue number as the forge shows it, or the merge request's with MergeRequest.
 	Issue int
+	// MergeRequest makes Issue a merge request (GitLab notes live under /merge_requests/; GitHub's pull requests take
+	// comments through the issues API anyway).
+	MergeRequest bool
 	// DryRun reads but never writes.
 	DryRun bool
 }
