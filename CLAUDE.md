@@ -50,6 +50,16 @@ talks to a forge lives here.
     an earlier one (the schedule was edited away, so no stale preview stays) and removes the label. The action's new
     `schedule` output is false then, and it neither uploads the week nor fails. Checked live on GitLab CE 19.4.1.
   - **Next:** the core's templates and example drop their label once a release has all this.
+- **`playground build` (implemented 2026-11-21, core CLAUDE.md "Self-hosted playground and proposals"):** the local
+  part of a self-hosted playground. It unpacks the core's `canned-schedules-site_<version>.zip` into a new or empty
+  directory (regular files only, no absolute or `..` paths, at most 256 MiB, `index.html` at the root) and writes
+  `site.json` (`internal/playground`): the flags from `--args-file`, `catalog.names` from the catalog folder's
+  `*.canned-schedule.md` files, URL templates from `--forge`, `--server-url`, `--project` and `--branch` (GitLab:
+  new-file and edit pages with content, `forks/new`; GitHub: new-file page with `value`, the edit page as
+  `{url, prefill: false}`, `/fork`), checked with the core's `CheckSite` before writing. Key order of `site.json` is
+  kept readable (fieldalignment exemptions). Downloading and verifying the zip and publishing stay with the wrappers
+  (next: the GitLab component with a `pages` job, then the Action); the binary never touches the network. Checked
+  with the real `v0.3.3` zip, verified against `checksums.txt` and its signature.
 - **Evaluation flags keep the core CLI's names and meaning** (`--require-base true|false` takes a value), so a
   `canned-schedules.args` line works here too.
 - **Exit codes:** 0 valid, 1 request errors (files still written), 2 usage or environment.
@@ -172,6 +182,7 @@ talks to a forge lives here.
 - `action.yml`: the composite GitHub Action (step 1).
 - `templates/issue-preview.yml`: the GitLab CI/CD component (step 1).
 - `cmd/canned-schedules-companion`: the binary, flag parsing, input reading, atomic writes, exit codes.
+- `internal/playground`: `playground build`'s local part (`SiteJSON`, `ReadArgs`, `Names`), pure.
 - `internal/preview`: step 1's local part (`Render`, `Body`, `ParseLink`, `ParseFiddleBase`, `FiddleLink`), pure.
 - `internal/forge`: what the forge clients share.
 - `internal/forge/github`: the only code that talks to GitHub.
