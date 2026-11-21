@@ -7,7 +7,7 @@ a decision changes.
 ## Goal
 
 The lifecycle steps around canned schedules (issue #38 in the core repo): 1 issue feedback, 2 promotion of an approved
-proposal to the catalog, 3 publishing, 4 housekeeping. The core stays pure (no network, no forge flags); everything that
+proposal to the catalog (built 2026-11-21), 3 publishing, 4 housekeeping. The core stays pure (no network, no forge flags); everything that
 talks to a forge lives here.
 
 ## Decisions
@@ -114,6 +114,28 @@ talks to a forge lives here.
   submitted text as `<project path with hyphens>-<kind>-<number>.md` (`acme-catalog-issue-12.md`), so a downloaded file
   says where it came from. On GitHub the kind is always `issue`; on GitLab it follows the work item's type. GitLab
   removes quick actions from a description when it stores it, so its copy is the stored text.
+- **Promotion, step 2 (decided and implemented 2026-11-21):** an approved issue becomes a pull or merge request that
+  adds its schedule to the catalog.
+  - **A label approves** (`Schedule approved` by default, chosen by the user over a `/promote` comment and a manual
+    run): setting labels takes Triage (GitHub) or Reporter (GitLab), so that permission is the approval, and both
+    forges send the change as an issue event the existing triggers already receive.
+  - **The issue's text goes in verbatim** (the user's choice over the canonical form, as for the playground's
+    `{content}`), with LF line endings and one final newline only (`promote.Normalize`).
+  - `promote prepare` (`internal/promote`, local): `cs.Evaluate` with the catalog's flags; `promote.json` (`valid`,
+    `schedule`, `name`, `path`, `title`), `schedule.md` (valid only), `report.md`. The path is `catalog-dir/` plus
+    `cs.FileName` of the H1; `catalog-dir` follows `site.json`'s rule. Exit 1 without a valid schedule.
+  - `promote open` (forge): branch `canned-schedules/issue-<N>` (`--branch-prefix`), created from `--base-branch` with
+    the first commit; the file compared with the branch (or the base when the branch is new): same text on the base
+    means nothing to promote, same on the branch no commit; then one open request per branch (found or opened),
+    titled `review.Title`, its body "Closes #N." Without a valid schedule `--approved-label` is removed and it exits
+    1. Clients: `BranchExists`, `File` (GitHub keeps the blob SHA for the update), `CommitFile` (GitHub: create the
+    ref, then the contents API; GitLab: one commit with `start_branch`), `OpenRequest`; 404s are `errStatus`.
+  - `promote/action.yml` on `issues: labeled` (the caller's `if:` names the label), after a checkout of the default
+    branch for the args file. GitHub needs "Allow GitHub Actions to create and approve pull requests", and a pull
+    request opened with the workflow token starts no workflows (no review run; the promotion checked the schedule).
+    `templates/promote.yml` runs on the issue preview's webhook pipeline and acts only when the event's
+    `changes.labels` added the label; it reads the issue's current text through the API, the args file from the
+    checkout, and needs `CANNED_SCHEDULES_TOKEN` with the Developer role.
 - **`preview post --forge github` (implemented 2026-11-08):** `internal/forge/github` with plain `net/http` (no
   dependency): lists the issue's comments (100 per page), takes those starting with the marker and written by
   `--author` (default `github-actions[bot]`), updates the oldest, deletes the others, or creates one. Everything is
@@ -233,6 +255,7 @@ talks to a forge lives here.
 - `internal/playground`: `playground build`'s local part (`SiteJSON`, `ReadArgs`, `Names`), pure.
 - `internal/review`: the merge request review's local part (`Render`, `Title`, `DefaultTitle`), pure.
 - `templates/review.yml`: the GitLab component that reviews merge requests.
+- `promote/action.yml`, `templates/promote.yml`, `internal/promote`: promotion of an approved issue (step 2).
 - `playground/action.yml`, `review/action.yml`: the GitHub Actions for the playground on Pages and the pull request
   review; `action:version` checks their version defaults with the others.
 - `internal/preview`: step 1's local part (`Render`, `Body`, `ParseLink`, `ParseFiddleBase`, `FiddleLink`), pure.

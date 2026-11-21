@@ -1,0 +1,154 @@
+name: Canned schedule promotion
+description: Turns an approved issue that proposes a schedule into a pull request that adds it to the catalog.
+branding:
+  icon: calendar
+  color: green
+
+# The caller runs it on issues: labeled, when the label is the approval label, after checking out the default branch
+# (for the args file) and writing the issue body to a file from an environment variable. Permissions: contents: write
+# (the branch), pull-requests: write and issues: write (the label). GitHub lets the workflow token open pull requests
+# only with Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests", and a pull
+# request it opens starts no workflows (the review action doesn't run on it; this action checked the schedule). Inputs
+# reach the shell only through environment variables, never through ${{ }} inside a script.
+inputs:
+  body-file:
+    description: The issue body as a file. Write it from an environment variable, never by interpolating it.
+    required: true
+  version:
+    description: The canned-schedules-companion release to install. The default is the release this action belongs to.
+    default: "0.3.3"
+  issue:
+    description: The approved issue.
+    default: ${{ github.event.issue.number }}
+  base-branch:
+    description: The branch the pull request targets.
+    default: ${{ github.event.repository.default_branch }}
+  catalog-dir:
+    description: The catalog's folder in the repository.
+    default: schedules
+  args-file:
+    description: The flags to check with, as canned-schedules.args, read from the checkout. A missing file means none.
+    default: canned-schedules.args
+  approved-label:
+    description: The label that approved the issue; removed again when the issue holds no valid schedule. Empty leaves labels alone.
+    default: Schedule approved
+  branch-prefix:
+    description: The pull request's branch is this prefix plus the issue number.
+    default: canned-schedules/issue-
+  token:
+    description: The token that pushes the branch, opens the pull request and removes the label.
+    default: ${{ github.token }}
+  dry-run:
+    description: true reads the repository and says what would change, but writes nothing.
+    default: "false"
+
+outputs:
+  valid:
+    description: true when the issue holds a valid schedule.
+    value: ${{ steps.prepare.outputs.valid }}
+  out-dir:
+    description: The directory with the catalog file, its report and promote.json.
+    value: ${{ steps.setup.outputs.out-dir }}
+
+runs:
+  using: composite
+  steps:
+    # Everything runs from a new directory, so a mise.toml in the caller's checkout can't change what gets installed.
+    - id: setup
+      name: Check the inputs and prepare a working directory
+      shell: bash
+      env:
+        BODY_FILE: ${{ inputs.body-file }}
+        VERSION: ${{ inputs.version }}
+        ISSUE: ${{ inputs.issue }}
+        DRY_RUN: ${{ inputs.dry-run }}
+      run: |
+        set -euo pipefail
+        fail() {
+          printf '::error::%s\n' "$1"
+          exit 2
+        }
+        [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || fail 'version: want a release such as 1.2.3'
+        [[ $ISSUE =~ ^[1-9][0-9]*$ ]] || fail 'issue: want an issue number'
+        [[ $DRY_RUN == true || $DRY_RUN == false ]] || fail 'dry-run: want true or false'
+        case $BODY_FILE in /*) ;; *) BODY_FILE=$GITHUB_WORKSPACE/$BODY_FILE ;; esac
+        [[ -f $BODY_FILE ]] || fail 'body-file: no such file'
+        work_dir=$(mktemp -d "$RUNNER_TEMP/canned-schedules-promotion.XXXXXX")
+        cp "$BODY_FILE" "$work_dir/issue-$ISSUE.md"
+        {
+          printf 'work-dir=%s\n' "$work_dir"
+          printf 'out-dir=%s\n' "$work_dir/promotion"
+        } >> "$GITHUB_OUTPUT"
+
+    # Verifies the release's build provenance attestation on install.
+    - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+      with:
+        version: 2026.10.19 # mise itself; pinned, see CLAUDE.md
+        install_args: github:iilei/canned-schedules-companion@${{ inputs.version }}
+        working_directory: ${{ steps.setup.outputs.work-dir }}
+        github_token: ${{ inputs.token }}
+        cache: false
+
+    # Exit 1 means the issue holds no valid schedule: promote open still runs, to take the approval back.
+    - id: prepare
+      name: Check the issue's schedule
+      shell: bash
+      working-directory: ${{ steps.setup.outputs.work-dir }}
+      env:
+        VERSION: ${{ inputs.version }}
+        ISSUE: ${{ inputs.issue }}
+        CATALOG_DIR: ${{ inputs.catalog-dir }}
+        ARGS_FILE: ${{ inputs.args-file }}
+        OUT_DIR: ${{ steps.setup.outputs.out-dir }}
+      run: |
+        set -uo pipefail
+        args=()
+        if [[ -n $ARGS_FILE && -f $GITHUB_WORKSPACE/$ARGS_FILE ]]; then
+          while IFS= read -r line || [[ -n $line ]]; do
+            line=${line%$'\r'}
+            case $line in '' | '#'*) continue ;; esac
+            args+=("$line")
+          done < "$GITHUB_WORKSPACE/$ARGS_FILE"
+        fi
+        rc=0
+        mise exec "github:iilei/canned-schedules-companion@$VERSION" -- canned-schedules-companion promote prepare \
+          ${args[@]+"${args[@]}"} --catalog-dir "$CATALOG_DIR" --out-dir "$OUT_DIR" "issue-$ISSUE.md" || rc=$?
+        if [[ $rc -gt 1 || ! -f $OUT_DIR/promote.json ]]; then
+          printf '::error::The issue could not be checked (exit code %s).\n' "$rc"
+          exit 2
+        fi
+        valid=false
+        if [[ $rc -eq 0 ]]; then valid=true; fi
+        printf 'valid=%s\n' "$valid" >> "$GITHUB_OUTPUT"
+
+    - name: Open or update the pull request
+      shell: bash
+      working-directory: ${{ steps.setup.outputs.work-dir }}
+      env:
+        VERSION: ${{ inputs.version }}
+        ISSUE: ${{ inputs.issue }}
+        BASE_BRANCH: ${{ inputs.base-branch }}
+        APPROVED_LABEL: ${{ inputs.approved-label }}
+        BRANCH_PREFIX: ${{ inputs.branch-prefix }}
+        DRY_RUN: ${{ inputs.dry-run }}
+        OUT_DIR: ${{ steps.setup.outputs.out-dir }}
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: |
+        set -uo pipefail
+        flags=(
+          --forge github
+          --repo "$GITHUB_REPOSITORY"
+          --issue "$ISSUE"
+          --base-branch "$BASE_BRANCH"
+          --branch-prefix "$BRANCH_PREFIX"
+          --api-url "$GITHUB_API_URL"
+        )
+        if [[ -n $APPROVED_LABEL ]]; then flags+=(--approved-label "$APPROVED_LABEL"); fi
+        if [[ $DRY_RUN == true ]]; then flags+=(--dry-run); fi
+        rc=0
+        mise exec "github:iilei/canned-schedules-companion@$VERSION" -- canned-schedules-companion promote open \
+          "${flags[@]}" "$OUT_DIR" || rc=$?
+        if [[ $rc -eq 1 ]]; then
+          printf '::error::The issue holds no valid schedule, so it was not promoted. Its comment lists the problems.\n'
+        fi
+        exit "$rc"
