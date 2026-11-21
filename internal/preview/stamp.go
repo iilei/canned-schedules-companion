@@ -22,7 +22,7 @@ const markerEnd = "-->"
 // Stamp records what a comment was rendered from, so a later run with the same inputs can leave it alone. It sits in
 // the marker line, invisible on the forge: <!-- canned-schedules:issue-preview sha256=… tool=… args=… -->.
 type Stamp struct {
-	// Body is the SHA-256 of the request (BodyDigest).
+	// Body is the SHA-256 of the proposal (BodyDigest).
 	Body string
 	// Tool names the program that rendered the comment, with its version.
 	Tool string
@@ -72,7 +72,7 @@ func ParseStampFor(marker, comment string) (Stamp, bool) {
 	return s, s.Body != "" && s.Tool != "" && s.Args != ""
 }
 
-// BodyDigest is the SHA-256 of a request with CRLF line endings read as LF: issue bodies reach a job with either,
+// BodyDigest is the SHA-256 of a proposal with CRLF line endings read as LF: issue bodies reach a job with either,
 // depending on whether they come from the event or the API, and the check reads both the same way.
 func BodyDigest(src []byte) string {
 	sum := sha256.Sum256(bytes.ReplaceAll(src, []byte("\r\n"), []byte("\n")))
@@ -80,7 +80,7 @@ func BodyDigest(src []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// ArgsDigest is the SHA-256 of the effective options and the playground link's base: everything besides the request
+// ArgsDigest is the SHA-256 of the effective options and the playground link's base: everything besides the proposal
 // that changes the comment. Spelling a flag differently gives the same digest.
 func ArgsDigest(opts *cs.Options, fiddle *url.URL) string {
 	var base string

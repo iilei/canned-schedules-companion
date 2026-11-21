@@ -109,7 +109,7 @@ func post(f *postFlags, dir string, stdout io.Writer) error {
 	none := preview.IsNoSchedule(raw)
 	valid = valid && !none
 
-	// The notice stands alone: links to files (the reports of text that isn't a request) would only add noise.
+	// The notice stands alone: links to files (the reports of text that isn't a proposal) would only add noise.
 	if none {
 		f.links, f.note = nil, ""
 	}
@@ -156,7 +156,7 @@ func post(f *postFlags, dir string, stdout io.Writer) error {
 
 // upsert leaves a comment with the same stamp alone: the same text, tool and options give the same comment. A
 // comment without a stamp (earlier releases) or with another one is rendered again. Text without a schedule (none)
-// replaces an earlier comment but never starts one, so the bot stays silent on issues that aren't requests.
+// replaces an earlier comment but never starts one, so the bot stays silent on issues that aren't proposals.
 func upsert(ctx context.Context, f *postFlags, t *target, stamp preview.Stamp, none bool, stdout io.Writer) error {
 	u := &forge.Upsert{Repo: f.repo, Issue: f.issue, Marker: preview.Marker, Author: t.author, DryRun: true}
 
@@ -195,7 +195,7 @@ func upsert(ctx context.Context, f *postFlags, t *target, stamp preview.Stamp, n
 	return nil
 }
 
-// syncLabel makes the label say whether the request is valid: added when it is, removed when it isn't. CI is the
+// syncLabel makes the label say whether the schedule is valid: added when it is, removed when it isn't. CI is the
 // only one that sets it, so it can serve as "holds a valid schedule".
 func syncLabel(ctx context.Context, f *postFlags, c client, issue *forge.Issue, valid bool, stdout io.Writer) error {
 	if f.label == "" {
@@ -232,7 +232,7 @@ func syncLabel(ctx context.Context, f *postFlags, c client, issue *forge.Issue, 
 	return nil
 }
 
-// readValid reads whether the request is valid from the JSON report preview render wrote.
+// readValid reads whether the schedule is valid from the JSON report preview render wrote.
 func readValid(dir string) (bool, error) {
 	raw, err := os.ReadFile(filepath.Join(dir, preview.ReportJSON)) //nolint:gosec // The directory is the caller's.
 	if err != nil {
@@ -268,7 +268,7 @@ func gitHubTarget(f *postFlags, raw []byte, token string) *target {
 	}
 }
 
-// gitLabTarget uploads the week, when the request has one, and shows it inline in the note.
+// gitLabTarget uploads the week, when the schedule has one, and shows it inline in the note.
 func gitLabTarget(ctx context.Context, f *postFlags, dir string, raw []byte, token string,
 	stdout io.Writer,
 ) (*target, error) {
@@ -365,7 +365,7 @@ func parsePost(args []string, stderr io.Writer) (*postFlags, string, error) {
 		"GITLAB_TOKEN)")
 	fs.Var(&f.links, "link", "label=https://… shown under the comment (repeatable)")
 	fs.StringVar(&f.note, "note", "", "text in parentheses after the links")
-	fs.StringVar(&f.label, "label", "", "added to the issue when the request is valid, removed when it isn't "+
+	fs.StringVar(&f.label, "label", "", "added to the issue when the schedule is valid, removed when it isn't "+
 		"(empty: leave labels alone)")
 	fs.BoolVar(&f.dryRun, "dry-run", false, "read the issue's comments and say what would change, but write nothing")
 

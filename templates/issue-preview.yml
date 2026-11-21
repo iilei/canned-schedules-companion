@@ -1,10 +1,10 @@
-# Checks a schedule request issue and keeps one note on it up to date, with the week shown inline.
+# Checks an issue that proposes a schedule and keeps one note on it up to date, with the week shown inline.
 #
 # GitLab can't start a pipeline from an issue event by itself: an issue webhook calls a pipeline trigger URL, and this
 # job reads the event from TRIGGER_PAYLOAD. The README lists the setup. The job needs the CI/CD variable
 # CANNED_SCHEDULES_TOKEN: a project access token with the api scope and the Planner role.
 spec:
-  description: Checks schedule request issues and keeps one note on each up to date.
+  description: Checks issues that propose schedules and keeps one note on each up to date.
   inputs:
     stage:
       description: The stage of the job.
@@ -166,7 +166,7 @@ canned-schedule-preview:
       (cd "$work_dir" && canned-schedules-companion preview render "$@" --out-dir "$out_dir" request.md) || rc=$?
       [ "$rc" -le 1 ] || exit "$rc"
 
-      # The request as GitLab stores it, named after where it came from: project, kind of work item and number.
+      # The proposal as GitLab stores it, named after where it came from: project, kind of work item and number.
       kind=$(jq -r '(.type // "issue") | ascii_downcase' "$work_dir/issue.json")
       case $kind in
         '' | *[!a-z_]*) kind=issue ;;

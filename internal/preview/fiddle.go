@@ -35,7 +35,7 @@ func ParseFiddleBase(s string) (*url.URL, error) {
 }
 
 // LockFiddle sets ?lock=1 on base, or removes a lock the base carries. A locked playground (the default) leaves only
-// the schedule editable: the run's flags in the link are the ones its request is checked with. Not security, since
+// the schedule editable: the run's flags in the link are the ones its proposal is checked with. Not security, since
 // the address can be edited; it shows who owns what.
 func LockFiddle(base *url.URL, lock bool) {
 	q := base.Query()

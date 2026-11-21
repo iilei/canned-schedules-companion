@@ -1,5 +1,5 @@
 // Command canned-schedules-companion runs the lifecycle steps around canned schedules: issue feedback first, later
-// promotion to the shelf, publishing and housekeeping.
+// promotion to the catalog, publishing and housekeeping.
 //
 // Usage:
 //
@@ -12,7 +12,7 @@
 // Every step splits into local verbs (render, prepare, check), which read and write files only, and forge verbs
 // (post, open, publish, retire), which write to GitHub or GitLab, support --dry-run and take the forge explicitly.
 //
-// Exit codes: 0 when the request is valid (render) or the comment is posted (post), 1 when the request has errors,
+// Exit codes: 0 when the schedule is valid (render) or the comment is posted (post), 1 when the schedule has errors,
 // 2 when the command line, the environment or the forge is unusable.
 package main
 
@@ -273,7 +273,7 @@ func readInput(file string) ([]byte, error) {
 	return src, nil
 }
 
-// writeAll removes every file the step can write, then writes files atomically, so a request that turned invalid
+// writeAll removes every file the step can write, then writes files atomically, so a schedule that turned invalid
 // leaves no stale preview behind.
 func writeAll(dir string, files map[string][]byte) error {
 	if err := os.MkdirAll(dir, dirMode); err != nil {
