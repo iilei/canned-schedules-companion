@@ -6,6 +6,7 @@ package github
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -62,6 +63,12 @@ type comment struct {
 	Body    string `json:"body"`
 	HTMLURL string `json:"html_url"`
 	ID      int64  `json:"id"`
+}
+
+// errStatus marks an answer whose HTTP status a caller looks at, e.g. 404 for a missing branch or file.
+type errStatus struct {
+	err  error
+	code int
 }
 
 // UpsertComment finds the comments on the issue that start with u.Marker and were written by u.Author. It updates
@@ -221,6 +228,151 @@ func (c *Client) SetMergeRequestTitle(ctx context.Context, repo string, number i
 	return c.do(ctx, http.MethodPatch, base+"/pulls/"+strconv.Itoa(number), map[string]string{"title": title}, nil)
 }
 
+func (e *errStatus) Error() string { return e.err.Error() }
+
+func (e *errStatus) Unwrap() error { return e.err }
+
+// notFound reports whether err is the API's 404.
+func notFound(err error) bool {
+	var s *errStatus
+
+	return errors.As(err, &s) && s.code == http.StatusNotFound
+}
+
+// BranchExists reports whether the branch exists.
+func (c *Client) BranchExists(ctx context.Context, repo, branch string) (bool, error) {
+	base, err := repoPath(repo)
+	if err != nil {
+		return false, err
+	}
+
+	err = c.do(ctx, http.MethodGet, base+"/branches/"+url.PathEscape(branch), nil, nil)
+	if notFound(err) {
+		return false, nil
+	}
+
+	return err == nil, err
+}
+
+// File reads a file on a branch; nil without an error means the branch has no such file.
+func (c *Client) File(ctx context.Context, repo, ref, file string) (*forge.File, error) {
+	base, err := repoPath(repo)
+	if err != nil {
+		return nil, err
+	}
+
+	var got struct {
+		Content  string `json:"content"`
+		Encoding string `json:"encoding"`
+		SHA      string `json:"sha"`
+	}
+
+	err = c.do(ctx, http.MethodGet, base+"/contents/"+escapeFilePath(file)+"?ref="+url.QueryEscape(ref), nil, &got)
+	if notFound(err) {
+		return nil, nil //nolint:nilnil // No file is an answer, not an error.
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	if got.Encoding != "base64" {
+		return nil, fmt.Errorf("%s: content encoded as %q", file, got.Encoding)
+	}
+
+	raw, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(got.Content, "\n", ""))
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", file, err)
+	}
+
+	return &forge.File{Content: raw, Version: got.SHA}, nil
+}
+
+// CommitFile writes one file to a branch, creating the branch from c.From first when it is set.
+func (c *Client) CommitFile(ctx context.Context, cm *forge.Commit) error {
+	base, err := repoPath(cm.Repo)
+	if err != nil {
+		return err
+	}
+
+	if cm.From != "" {
+		var from struct {
+			Object struct {
+				SHA string `json:"sha"`
+			} `json:"object"`
+		}
+
+		if err := c.do(ctx, http.MethodGet, base+"/git/ref/heads/"+escapeFilePath(cm.From), nil, &from); err != nil {
+			return err
+		}
+
+		ref := map[string]string{"ref": "refs/heads/" + cm.Branch, "sha": from.Object.SHA}
+		if err := c.do(ctx, http.MethodPost, base+"/git/refs", ref, nil); err != nil {
+			return err
+		}
+	}
+
+	payload := map[string]string{
+		"message": cm.Message,
+		"content": base64.StdEncoding.EncodeToString(cm.Content),
+		"branch":  cm.Branch,
+	}
+	if cm.Replace != nil {
+		payload["sha"] = cm.Replace.Version
+	}
+
+	return c.do(ctx, http.MethodPut, base+"/contents/"+escapeFilePath(cm.Path), payload, nil)
+}
+
+// OpenRequest finds the open pull request from the branch, or opens one; it returns the pull request's page and
+// whether it was opened now.
+func (c *Client) OpenRequest(ctx context.Context, r *forge.Request, dryRun bool) (string, bool, error) {
+	base, err := repoPath(r.Repo)
+	if err != nil {
+		return "", false, err
+	}
+
+	owner, _, _ := strings.Cut(r.Repo, "/")
+
+	var open []struct {
+		URL string `json:"html_url"`
+	}
+
+	q := "?state=open&head=" + url.QueryEscape(owner+":"+r.Branch)
+	if err := c.do(ctx, http.MethodGet, base+"/pulls"+q, nil, &open); err != nil {
+		return "", false, err
+	}
+
+	if len(open) > 0 {
+		return open[0].URL, false, nil
+	}
+
+	if dryRun {
+		return "", true, nil
+	}
+
+	var made struct {
+		URL string `json:"html_url"`
+	}
+
+	payload := map[string]string{"title": r.Title, "head": r.Branch, "base": r.Base, "body": r.Body}
+	if err := c.do(ctx, http.MethodPost, base+"/pulls", payload, &made); err != nil {
+		return "", false, err
+	}
+
+	return made.URL, true, nil
+}
+
+// escapeFilePath escapes each segment of a repository path, keeping the slashes.
+func escapeFilePath(p string) string {
+	parts := strings.Split(p, "/")
+	for i, s := range parts {
+		parts[i] = url.PathEscape(s)
+	}
+
+	return strings.Join(parts, "/")
+}
+
 func repoPath(repo string) (string, error) {
 	owner, name, ok := strings.Cut(repo, "/")
 	if !ok || owner == "" || name == "" || strings.Contains(name, "/") {
@@ -292,7 +444,10 @@ func (c *Client) do(ctx context.Context, method, path string, payload, out any) 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
 
-		return fmt.Errorf("%s %s: %s: %s", method, req.URL.Path, resp.Status, bytes.TrimSpace(msg))
+		return &errStatus{
+			err:  fmt.Errorf("%s %s: %s: %s", method, req.URL.Path, resp.Status, bytes.TrimSpace(msg)),
+			code: resp.StatusCode,
+		}
 	}
 
 	if out == nil {

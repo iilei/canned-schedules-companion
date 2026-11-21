@@ -24,6 +24,12 @@ const (
 	forgeGitLab = "gitlab"
 )
 
+// The variables the forge verbs read their token from by default.
+const (
+	gitHubTokenEnv = "GITHUB_TOKEN" //nolint:gosec // The name of a variable, not a credential.
+	gitLabTokenEnv = "GITLAB_TOKEN" //nolint:gosec // The name of a variable, not a credential.
+)
+
 var (
 	errForge = errors.New("--forge: want github or gitlab")
 	errToken = errors.New("no token")
@@ -397,12 +403,21 @@ func parsePost(args []string, stderr io.Writer) (*postFlags, string, error) {
 	return &f, fs.Arg(0), nil
 }
 
+// forgeDefaults is the REST API and the token variable a forge verb uses unless told otherwise.
+//
+//nolint:nonamedreturns // Two strings of the same type, named for the reader.
+func forgeDefaults(name string) (apiURL, tokenEnv string) {
+	if name == forgeGitLab {
+		return gitlab.DefaultAPIURL, gitLabTokenEnv
+	}
+
+	return github.DefaultAPIURL, gitHubTokenEnv
+}
+
 // applyDefaults fills in what depends on the forge. GitLab's author stays empty: the token's user, asked at run time.
 func (f *postFlags) applyDefaults() {
-	apiURL, tokenEnv := github.DefaultAPIURL, "GITHUB_TOKEN" //nolint:gosec // The name of a variable, not a credential.
-	if f.forge == forgeGitLab {
-		apiURL, tokenEnv = gitlab.DefaultAPIURL, "GITLAB_TOKEN"
-	} else if f.author == "" {
+	apiURL, tokenEnv := forgeDefaults(f.forge)
+	if f.forge == forgeGitHub && f.author == "" {
 		f.author = github.DefaultAuthor
 	}
 

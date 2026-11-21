@@ -385,10 +385,8 @@ func parseReviewPost(args []string, stderr io.Writer) (*reviewFlags, string, err
 
 // applyDefaults fills in what depends on the forge, as preview post does.
 func (f *reviewFlags) applyDefaults() {
-	apiURL, tokenEnv := github.DefaultAPIURL, "GITHUB_TOKEN" //nolint:gosec // The name of a variable, not a credential.
-	if f.forge == forgeGitLab {
-		apiURL, tokenEnv = gitlab.DefaultAPIURL, "GITLAB_TOKEN"
-	} else if f.author == "" {
+	apiURL, tokenEnv := forgeDefaults(f.forge)
+	if f.forge == forgeGitHub && f.author == "" {
 		f.author = github.DefaultAuthor
 	}
 
