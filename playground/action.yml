@@ -1,0 +1,153 @@
+name: Canned schedule playground
+description: Builds a self-hosted playground for the catalog and uploads it for GitHub Pages, so a valid schedule goes from the editor straight to a pull request.
+branding:
+  icon: calendar
+  color: green
+
+# The caller checks out the default branch and deploys the uploaded site with actions/deploy-pages in a job of its own
+# (environment github-pages, permissions pages: write and id-token: write); this action only needs contents: read.
+# It installs the companion through mise (which verifies the release's provenance attestation), downloads the core's
+# site zip, verifies it with GPG against the release key, runs `playground build` and uploads the result. Inputs reach
+# the shell only through environment variables, never through ${{ }} inside a script.
+inputs:
+  version:
+    description: The canned-schedules-companion release to install. The default is the release this action belongs to.
+    default: "0.3.2"
+  site-version:
+    description: The canned-schedules release whose page to publish. Empty means the one the companion is built with, so the playground checks as the review does.
+    default: ""
+  server-url:
+    description: The forge's web address as readers reach it, https only. Proposals open pages there.
+    default: ${{ github.server_url }}
+  repository:
+    description: The repository proposals go to, as OWNER/REPO.
+    default: ${{ github.repository }}
+  branch:
+    description: The branch proposals target.
+    default: ${{ github.event.repository.default_branch }}
+  catalog-dir:
+    description: The catalog's folder in the repository.
+    default: schedules
+  args-file:
+    description: The flags the catalog's CI checks with, as canned-schedules.args. A missing file means no flags.
+    default: canned-schedules.args
+  name:
+    description: Shown in the page's header. Empty means none.
+    default: ""
+  fork:
+    description: true links readers who can't push to the repository's fork page.
+    default: "false"
+  token:
+    description: The token mise uses to read the release from GitHub's API.
+    default: ${{ github.token }}
+
+outputs:
+  site-dir:
+    description: The built site, as uploaded.
+    value: ${{ steps.setup.outputs.site-dir }}
+  artifact-id:
+    description: The uploaded Pages artifact.
+    value: ${{ steps.upload.outputs.artifact_id }}
+
+runs:
+  using: composite
+  steps:
+    # mise and the downloads run in a new directory, so a mise.toml in the caller's checkout can't change what gets
+    # installed.
+    - id: setup
+      name: Check the inputs and prepare a working directory
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        SITE_VERSION: ${{ inputs.site-version }}
+        FORK: ${{ inputs.fork }}
+        RUNNER: ${{ runner.os }}
+      run: |
+        set -euo pipefail
+        fail() {
+          printf '::error::%s\n' "$1"
+          exit 2
+        }
+        [[ $RUNNER == Linux ]] || fail 'the playground builds on Linux runners'
+        release='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
+        [[ $VERSION =~ $release ]] || fail 'version: want a release such as 1.2.3'
+        [[ -z $SITE_VERSION || $SITE_VERSION =~ $release ]] || fail 'site-version: want a release such as 1.2.3'
+        [[ $FORK == true || $FORK == false ]] || fail 'fork: want true or false'
+        work_dir=$(mktemp -d "$RUNNER_TEMP/canned-schedules-playground.XXXXXX")
+        {
+          printf 'work-dir=%s\n' "$work_dir"
+          printf 'site-dir=%s\n' "$work_dir/site"
+        } >> "$GITHUB_OUTPUT"
+
+    # Verifies the release's build provenance attestation on install.
+    - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+      with:
+        version: 2026.10.19 # mise itself; pinned, see CLAUDE.md
+        install_args: github:iilei/canned-schedules-companion@${{ inputs.version }}
+        working_directory: ${{ steps.setup.outputs.work-dir }}
+        github_token: ${{ inputs.token }}
+        cache: false
+
+    - name: Download and verify the site zip, then build the playground
+      shell: bash
+      working-directory: ${{ steps.setup.outputs.work-dir }}
+      env:
+        VERSION: ${{ inputs.version }}
+        SITE_VERSION: ${{ inputs.site-version }}
+        SERVER_URL: ${{ inputs.server-url }}
+        REPOSITORY: ${{ inputs.repository }}
+        BRANCH: ${{ inputs.branch }}
+        CATALOG_DIR: ${{ inputs.catalog-dir }}
+        ARGS_FILE: ${{ inputs.args-file }}
+        NAME: ${{ inputs.name }}
+        FORK: ${{ inputs.fork }}
+        SITE_DIR: ${{ steps.setup.outputs.site-dir }}
+        # canned-schedules' release key, which signs the core's and the companion's releases.
+        RELEASE_KEY: B645234C9CB8175ECA5D78A5C8447A2252E9E7B6
+      run: |
+        set -euo pipefail
+        fail() {
+          printf '::error::%s\n' "$1"
+          exit 2
+        }
+        companion() {
+          mise exec "github:iilei/canned-schedules-companion@$VERSION" -- canned-schedules-companion "$@"
+        }
+
+        # The page of the core the companion is built with, unless site-version names another.
+        site_version=$SITE_VERSION
+        if [[ -z $site_version ]]; then
+          site_version=$(companion --version | sed -n 's/.*(canned-schedules \([^)]*\))$/\1/p')
+        fi
+        case $site_version in
+          '' | dev | unknown) fail 'set site-version: the companion names no canned-schedules release' ;;
+        esac
+
+        zip=canned-schedules-site_${site_version}.zip
+        release=https://github.com/iilei/canned-schedules/releases/download/v$site_version
+        for f in "$zip" checksums.txt checksums.txt.sig release-key.asc; do
+          curl --fail --silent --show-error --location --max-time 120 --output "$f" "$release/$f"
+        done
+        GNUPGHOME=$(mktemp -d)
+        export GNUPGHOME
+        gpg --batch --quiet --import release-key.asc
+        gpg --batch --status-fd 1 --verify checksums.txt.sig checksums.txt 2>/dev/null |
+          grep -q "^\[GNUPG:\] VALIDSIG .* $RELEASE_KEY\$" || fail "the signature on $release/checksums.txt is not valid"
+        awk -v f="$zip" '$2 == f' checksums.txt | sha256sum --check --status - || fail "$zip does not match checksums.txt"
+
+        args=(--site-zip "$zip" --forge github --server-url "$SERVER_URL" --project "$REPOSITORY" --branch "$BRANCH"
+          --repo-root "$GITHUB_WORKSPACE" --catalog-dir "$CATALOG_DIR")
+        if [[ ! -d $GITHUB_WORKSPACE/$CATALOG_DIR ]]; then args+=(--no-catalog); fi
+        if [[ -n $ARGS_FILE && -f $GITHUB_WORKSPACE/$ARGS_FILE ]]; then
+          args+=(--args-file "$GITHUB_WORKSPACE/$ARGS_FILE")
+        fi
+        if [[ -n $NAME ]]; then args+=(--name "$NAME"); fi
+        if [[ $FORK == true ]]; then args+=(--fork); fi
+
+        companion playground build "${args[@]}" "$SITE_DIR"
+
+    - id: upload
+      name: Upload the site for GitHub Pages
+      uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+      with:
+        path: ${{ steps.setup.outputs.site-dir }}

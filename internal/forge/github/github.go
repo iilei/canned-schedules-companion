@@ -1,5 +1,6 @@
-// Package github is the GitHub part of the forge steps: it keeps one marked comment per issue up to date through the
-// REST API. Nothing else in the companion talks to GitHub.
+// Package github is the GitHub part of the forge steps: it keeps one marked comment per issue or pull request up to
+// date through the REST API, and reads, labels and renames pull requests. Nothing else in the companion talks to
+// GitHub.
 package github
 
 import (
@@ -163,6 +164,61 @@ func (c *Client) RemoveLabel(ctx context.Context, repo string, issue int, label 
 	path := base + "/issues/" + strconv.Itoa(issue) + "/labels/" + url.PathEscape(label)
 
 	return c.do(ctx, http.MethodDelete, path, nil, nil)
+}
+
+// UpsertNote is UpsertComment under the name the review step uses for both forges. A pull request takes comments
+// through the issues API, so u.MergeRequest changes nothing here.
+func (c *Client) UpsertNote(ctx context.Context, u *Upsert) (*Plan, error) {
+	return c.UpsertComment(ctx, u)
+}
+
+// MergeRequest reads a pull request's title, head commit and labels.
+func (c *Client) MergeRequest(ctx context.Context, repo string, number int) (*forge.MergeRequest, error) {
+	base, err := repoPath(repo)
+	if err != nil {
+		return nil, err
+	}
+
+	var got struct {
+		Title string `json:"title"`
+		Head  struct {
+			SHA string `json:"sha"`
+		} `json:"head"`
+		Labels []struct {
+			Name string `json:"name"`
+		} `json:"labels"`
+	}
+
+	if err := c.do(ctx, http.MethodGet, base+"/pulls/"+strconv.Itoa(number), nil, &got); err != nil {
+		return nil, err
+	}
+
+	out := &forge.MergeRequest{Title: got.Title, SHA: got.Head.SHA}
+	for _, l := range got.Labels {
+		out.Labels = append(out.Labels, l.Name)
+	}
+
+	return out, nil
+}
+
+// AddMergeRequestLabel adds a label to a pull request (through the issues API, like any issue).
+func (c *Client) AddMergeRequestLabel(ctx context.Context, repo string, number int, label string) error {
+	return c.AddLabel(ctx, repo, number, label)
+}
+
+// RemoveMergeRequestLabel removes a label from a pull request.
+func (c *Client) RemoveMergeRequestLabel(ctx context.Context, repo string, number int, label string) error {
+	return c.RemoveLabel(ctx, repo, number, label)
+}
+
+// SetMergeRequestTitle renames a pull request.
+func (c *Client) SetMergeRequestTitle(ctx context.Context, repo string, number int, title string) error {
+	base, err := repoPath(repo)
+	if err != nil {
+		return err
+	}
+
+	return c.do(ctx, http.MethodPatch, base+"/pulls/"+strconv.Itoa(number), map[string]string{"title": title}, nil)
 }
 
 func repoPath(repo string) (string, error) {

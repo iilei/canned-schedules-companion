@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/iilei/canned-schedules-companion/internal/forge"
+	"github.com/iilei/canned-schedules-companion/internal/forge/github"
 	"github.com/iilei/canned-schedules-companion/internal/forge/gitlab"
 	"github.com/iilei/canned-schedules-companion/internal/preview"
 	"github.com/iilei/canned-schedules-companion/internal/review"
@@ -22,7 +23,15 @@ import (
 // reviewJSON is what review render leaves for review post besides the comment.
 const reviewJSON = "review.json"
 
-var errNotYet = errors.New("--forge github: the merge request review supports GitLab for now")
+// reviewForge is what the review needs from a forge: one marked note, and the merge request's (pull request's) head,
+// labels and title.
+type reviewForge interface {
+	UpsertNote(ctx context.Context, u *forge.Upsert) (*forge.Plan, error)
+	MergeRequest(ctx context.Context, repo string, number int) (*forge.MergeRequest, error)
+	AddMergeRequestLabel(ctx context.Context, repo string, number int, label string) error
+	RemoveMergeRequestLabel(ctx context.Context, repo string, number int, label string) error
+	SetMergeRequestTitle(ctx context.Context, repo string, number int, title string) error
+}
 
 type reviewFlags struct {
 	forge, repo, apiURL, author, tokenEnv, label, headSHA string
@@ -150,15 +159,9 @@ func postReview(f *reviewFlags, dir string, stdout io.Writer) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	c := &gitlab.Client{
-		HTTP: http.DefaultClient, BaseURL: f.apiURL, Token: token,
-		UserAgent: "canned-schedules-companion/" + ownVersion(),
-	}
-
-	if f.author == "" {
-		if f.author, err = c.CurrentUser(ctx); err != nil {
-			return err
-		}
+	c, err := f.client(ctx, token)
+	if err != nil {
+		return err
 	}
 
 	mr, err := c.MergeRequest(ctx, f.repo, f.mergeRequest)
@@ -166,7 +169,7 @@ func postReview(f *reviewFlags, dir string, stdout io.Writer) error {
 		return err
 	}
 
-	where := fmt.Sprintf("%s!%d", f.repo, f.mergeRequest)
+	where := f.where()
 
 	// A pipeline for an older commit must not overwrite what the pipeline for the newer one posts.
 	if f.headSHA != "" && mr.SHA != f.headSHA {
@@ -186,7 +189,47 @@ func postReview(f *reviewFlags, dir string, stdout io.Writer) error {
 	return retitle(ctx, c, f, mr, summary, stdout)
 }
 
-func upsertReview(ctx context.Context, c *gitlab.Client, f *reviewFlags, stamp preview.Stamp, body string,
+// client makes the forge's client. On GitLab an empty --author means the token's user, asked here; GitHub's default
+// is the workflow token's account (applyDefaults).
+func (f *reviewFlags) client(ctx context.Context, token string) (reviewForge, error) {
+	agent := "canned-schedules-companion/" + ownVersion()
+
+	if f.forge == forgeGitHub {
+		return &github.Client{HTTP: http.DefaultClient, BaseURL: f.apiURL, Token: token, UserAgent: agent}, nil
+	}
+
+	c := &gitlab.Client{HTTP: http.DefaultClient, BaseURL: f.apiURL, Token: token, UserAgent: agent}
+
+	if f.author == "" {
+		var err error
+		if f.author, err = c.CurrentUser(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	return c, nil
+}
+
+// where names the merge request as the forge writes it: group/project!1 on GitLab, owner/repo#1 on GitHub.
+func (f *reviewFlags) where() string {
+	sep := "!"
+	if f.forge == forgeGitHub {
+		sep = "#"
+	}
+
+	return fmt.Sprintf("%s%s%d", f.repo, sep, f.mergeRequest)
+}
+
+// maxBody is the longest comment the forge takes.
+func (f *reviewFlags) maxBody() int {
+	if f.forge == forgeGitHub {
+		return preview.GitHubMaxBody
+	}
+
+	return preview.GitLabMaxBody
+}
+
+func upsertReview(ctx context.Context, c reviewForge, f *reviewFlags, stamp preview.Stamp, body string,
 	stdout io.Writer,
 ) error {
 	u := &forge.Upsert{
@@ -199,13 +242,13 @@ func upsertReview(ctx context.Context, c *gitlab.Client, f *reviewFlags, stamp p
 	}
 
 	if old, ok := preview.ParseStampFor(review.Marker, plan.Existing); ok && old == stamp && len(plan.Delete) == 0 {
-		fmt.Fprintf(stdout, "the review on %s!%d is up to date: %s\n", f.repo, f.mergeRequest, plan.URL)
+		fmt.Fprintf(stdout, "the review on %s is up to date: %s\n", f.where(), plan.URL)
 
 		return nil
 	}
 
-	if len(body) > preview.GitLabMaxBody {
-		return fmt.Errorf("the review has %d bytes, more than a note takes (%d)", len(body), preview.GitLabMaxBody)
+	if len(body) > f.maxBody() {
+		return fmt.Errorf("the review has %d bytes, more than a comment takes (%d)", len(body), f.maxBody())
 	}
 
 	u.Body = body
@@ -225,12 +268,12 @@ func upsertReview(ctx context.Context, c *gitlab.Client, f *reviewFlags, stamp p
 		action = map[string]string{forge.ActionCreate: "created", forge.ActionUpdate: "updated"}[plan.Action]
 	}
 
-	fmt.Fprintf(stdout, "%s%s the review on %s!%d %s\n", verb, action, f.repo, f.mergeRequest, plan.URL)
+	fmt.Fprintf(stdout, "%s%s the review on %s %s\n", verb, action, f.where(), plan.URL)
 
 	return nil
 }
 
-func syncReviewLabel(ctx context.Context, c *gitlab.Client, f *reviewFlags, mr *forge.MergeRequest, valid bool,
+func syncReviewLabel(ctx context.Context, c reviewForge, f *reviewFlags, mr *forge.MergeRequest, valid bool,
 	stdout io.Writer,
 ) error {
 	if f.label == "" {
@@ -249,15 +292,14 @@ func syncReviewLabel(ctx context.Context, c *gitlab.Client, f *reviewFlags, mr *
 
 	switch {
 	case valid && have == "":
-		fmt.Fprintf(stdout, "%s%s the label %s to %s!%d\n", verb, pastOr(f.dryRun, "add", "added"), f.label, f.repo,
-			f.mergeRequest)
+		fmt.Fprintf(stdout, "%s%s the label %s to %s\n", verb, pastOr(f.dryRun, "add", "added"), f.label, f.where())
 
 		if !f.dryRun {
 			return c.AddMergeRequestLabel(ctx, f.repo, f.mergeRequest, f.label)
 		}
 	case !valid && have != "":
-		fmt.Fprintf(stdout, "%s%s the label %s from %s!%d\n", verb, pastOr(f.dryRun, "remove", "removed"), have,
-			f.repo, f.mergeRequest)
+		fmt.Fprintf(stdout, "%s%s the label %s from %s\n", verb, pastOr(f.dryRun, "remove", "removed"), have,
+			f.where())
 
 		if !f.dryRun {
 			return c.RemoveMergeRequestLabel(ctx, f.repo, f.mergeRequest, have)
@@ -269,7 +311,7 @@ func syncReviewLabel(ctx context.Context, c *gitlab.Client, f *reviewFlags, mr *
 
 // retitle names the merge request after its schedules, but only while it has the title the forge's web editor gave
 // it, so nothing a person wrote is overwritten.
-func retitle(ctx context.Context, c *gitlab.Client, f *reviewFlags, mr *forge.MergeRequest, s reviewSummary,
+func retitle(ctx context.Context, c reviewForge, f *reviewFlags, mr *forge.MergeRequest, s reviewSummary,
 	stdout io.Writer,
 ) error {
 	title := review.Title(s.Names)
@@ -278,8 +320,7 @@ func retitle(ctx context.Context, c *gitlab.Client, f *reviewFlags, mr *forge.Me
 	}
 
 	verb := would(f.dryRun)
-	fmt.Fprintf(stdout, "%s%s %s!%d to %q\n", verb, pastOr(f.dryRun, "rename", "renamed"), f.repo, f.mergeRequest,
-		title)
+	fmt.Fprintf(stdout, "%s%s %s to %q\n", verb, pastOr(f.dryRun, "rename", "renamed"), f.where(), title)
 
 	if f.dryRun {
 		return nil
@@ -294,19 +335,22 @@ func parseReviewPost(args []string, stderr io.Writer) (*reviewFlags, string, err
 
 	var f reviewFlags
 
-	fs.StringVar(&f.forge, "forge", "", "the forge to post to: gitlab (required, never guessed; github follows)")
-	fs.StringVar(&f.repo, "repo", "", "the merge request's project: GROUP/PROJECT or a numeric ID (required)")
-	fs.IntVar(&f.mergeRequest, "merge-request", 0, "the merge request's number (required)")
+	fs.StringVar(&f.forge, "forge", "", "the forge to post to: github or gitlab (required, never guessed)")
+	fs.StringVar(&f.repo, "repo", "", "the merge request's project: GROUP/PROJECT or a numeric ID on GitLab, "+
+		"OWNER/REPO on GitHub (required)")
+	fs.IntVar(&f.mergeRequest, "merge-request", 0, "the merge request's (pull request's) number (required)")
 	fs.StringVar(&f.headSHA, "head-sha", "", "the commit this review is for; when the merge request has moved on, "+
 		"nothing is written")
-	fs.StringVar(&f.apiURL, "api-url", gitlab.DefaultAPIURL, "the REST API")
+	fs.StringVar(&f.apiURL, "api-url", "", "the REST API (default: github.com's or gitlab.com's)")
 	fs.StringVar(
 		&f.author,
 		"author",
 		"",
-		"only notes by this login count as the step's own (default: the token's user)",
+		"only comments by this login count as the step's own (default: the token's user on GitLab, "+
+			github.DefaultAuthor+" on GitHub)",
 	)
-	fs.StringVar(&f.tokenEnv, "token-env", "GITLAB_TOKEN", "the environment variable holding the token")
+	fs.StringVar(&f.tokenEnv, "token-env", "", "the environment variable holding the token (default: GITHUB_TOKEN "+
+		"or GITLAB_TOKEN)")
 	fs.StringVar(
 		&f.label,
 		"label",
@@ -322,9 +366,7 @@ func parseReviewPost(args []string, stderr io.Writer) (*reviewFlags, string, err
 	}
 
 	switch {
-	case f.forge == forgeGitHub:
-		return nil, "", errNotYet
-	case f.forge != forgeGitLab:
+	case f.forge != forgeGitHub && f.forge != forgeGitLab:
 		return nil, "", errForge
 	case f.repo == "" || f.mergeRequest < 1:
 		return nil, "", errors.New("--repo and --merge-request are required")
@@ -336,5 +378,25 @@ func parseReviewPost(args []string, stderr io.Writer) (*reviewFlags, string, err
 		return nil, "", errUsage
 	}
 
+	f.applyDefaults()
+
 	return &f, fs.Arg(0), nil
+}
+
+// applyDefaults fills in what depends on the forge, as preview post does.
+func (f *reviewFlags) applyDefaults() {
+	apiURL, tokenEnv := github.DefaultAPIURL, "GITHUB_TOKEN" //nolint:gosec // The name of a variable, not a credential.
+	if f.forge == forgeGitLab {
+		apiURL, tokenEnv = gitlab.DefaultAPIURL, "GITLAB_TOKEN"
+	} else if f.author == "" {
+		f.author = github.DefaultAuthor
+	}
+
+	if f.apiURL == "" {
+		f.apiURL = apiURL
+	}
+
+	if f.tokenEnv == "" {
+		f.tokenEnv = tokenEnv
+	}
 }

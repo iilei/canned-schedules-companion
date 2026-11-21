@@ -6,7 +6,7 @@
 //	canned-schedules-companion preview render [flags] request.md
 //	canned-schedules-companion preview post --forge github|gitlab --repo OWNER/REPO --issue N [flags] dir
 //	canned-schedules-companion review render [flags] file...
-//	canned-schedules-companion review post --forge gitlab --repo P --merge-request N [flags] dir
+//	canned-schedules-companion review post --forge github|gitlab --repo P --merge-request N [flags] dir
 //	canned-schedules-companion playground build --site-zip zip --forge github|gitlab --project P --branch B [flags] dir
 //
 // Every step splits into local verbs (render, prepare, check), which read and write files only, and forge verbs
@@ -56,7 +56,7 @@ const usage = `usage: canned-schedules-companion preview render [flags] request.
        canned-schedules-companion preview post --forge github|gitlab --repo OWNER/REPO --issue N [flags] dir
        canned-schedules-companion playground build --site-zip zip --forge github|gitlab --project P --branch B [flags] dir
        canned-schedules-companion review render [flags] file...
-       canned-schedules-companion review post --forge gitlab --repo P --merge-request N [flags] dir
+       canned-schedules-companion review post --forge github|gitlab --repo P --merge-request N [flags] dir
        canned-schedules-companion --version
 `
 
