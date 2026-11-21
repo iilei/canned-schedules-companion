@@ -240,8 +240,16 @@ talks to a forge lives here.
 
 ## Open
 
-1. **GitLab catalog, only if teams ask:** a project on gitlab.com for catalog search and the short `component:` syntax.
-2. **The screen recording** with the public demo repo
+1. **Step 3, publishing** (designed 2026-11-21 in the core's CLAUDE.md, "Step 3, publishing"; not built): the merge
+   request review attaches each changed schedule's generated files to the merge request (job artifacts on GitLab,
+   workflow artifacts on GitHub); on merge, a publish action / component fetches the files of the merged head's review,
+   writes them with the raw input and a provenance file (merge request and review run, merge commit, author and date
+   of the commit that last changed the file, tool versions, the review's stamp) under a path from its inputs, and runs
+   a user-provided post-fetch script (S3, Artifactory, a commit elsewhere). Local part: verify the merged file
+   against the review's stamp and write the layout and provenance; forge part: find and download the review's files.
+   Open questions are listed there.
+2. **GitLab catalog, only if teams ask:** a project on gitlab.com for catalog search and the short `component:` syntax.
+3. **The screen recording** with the public demo repo
    [`canned-schedules-demo`](https://github.com/iilei/canned-schedules-demo), a copy of the core's `examples/consumer`.
    Its first proposal (issue #1) ran the action for real on 2026-11-18: the comment was created, updated in place for an
    invalid and a fixed edit, and the artifacts were uploaded.
