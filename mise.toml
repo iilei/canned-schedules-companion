@@ -111,6 +111,12 @@ if [ "$have" != "$want" ]; then
   exit 1
 fi
 echo "templates/playground.yml installs $have"
+have=$(awk '/^    version:/ { found = 1 } found && /default:/ { gsub(/"/, "", $2); print $2; exit }' templates/review.yml)
+if [ "$have" != "$want" ]; then
+  echo "templates/review.yml installs $have, but the tag is $want: bump the default of its version input" >&2
+  exit 1
+fi
+echo "templates/review.yml installs $have"
 integrity=sha256-$(openssl dgst -sha256 -binary templates/issue-preview.yml | base64)
 grep -Fq "/refs/tags/$usage_tag/templates/issue-preview.yml" README.md || {
   echo "README.md doesn't include the template from $usage_tag" >&2
@@ -131,6 +137,16 @@ grep -Fq "integrity: $integrity" README.md || {
   exit 1
 }
 echo "README.md includes templates/playground.yml from $usage_tag"
+integrity=sha256-$(openssl dgst -sha256 -binary templates/review.yml | base64)
+grep -Fq "/refs/tags/$usage_tag/templates/review.yml" README.md || {
+  echo "README.md doesn't include templates/review.yml from $usage_tag" >&2
+  exit 1
+}
+grep -Fq "integrity: $integrity" README.md || {
+  echo "README.md has another integrity for templates/review.yml: want $integrity" >&2
+  exit 1
+}
+echo "README.md includes templates/review.yml from $usage_tag"
 '''
 
 [tasks.build]
