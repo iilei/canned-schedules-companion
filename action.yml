@@ -56,7 +56,7 @@ outputs:
     description: The link to the week as SVG (valid requests only).
     value: ${{ steps.svg.outputs.artifact-url }}
   files-url:
-    description: The link to all files as one zip.
+    description: The link to all files as one zip (not for an issue without a schedule).
     value: ${{ steps.files.outputs.artifact-url }}
 
 runs:
@@ -159,7 +159,9 @@ runs:
         retention-days: ${{ inputs.retention-days }}
         overwrite: true
 
+    # Text without a schedule gets a notice without links, so its reports aren't uploaded.
     - id: files
+      if: steps.render.outputs.schedule == 'true'
       name: Upload all files as one zip
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
@@ -201,7 +203,7 @@ runs:
         )
         if [[ -n $LABEL ]]; then flags+=(--label "$LABEL"); fi
         if [[ -n $SVG_URL ]]; then flags+=(--link "Week as SVG=$SVG_URL"); fi
-        flags+=(--link "All files=$FILES_URL")
+        if [[ -n $FILES_URL ]]; then flags+=(--link "All files=$FILES_URL"); fi
         if [[ $DRY_RUN == true ]]; then flags+=(--dry-run); fi
         mise exec "github:iilei/canned-schedules-companion@$VERSION" -- canned-schedules-companion preview post \
           "${flags[@]}" "$OUT_DIR"
