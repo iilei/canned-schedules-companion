@@ -55,8 +55,9 @@ talks to a forge lives here.
   directory (regular files only, no absolute or `..` paths, at most 256 MiB, `index.html` at the root) and writes
   `site.json` (`internal/playground`): the flags from `--args-file`, `catalog.names` from the catalog folder's
   `*.canned-schedule.md` files, URL templates from `--forge`, `--server-url`, `--project` and `--branch` (GitLab:
-  new-file and edit pages with content, `forks/new`; GitHub: new-file page with `value`, the edit page as
-  `{url, prefill: false}`, `/fork`), checked with the core's `CheckSite` before writing. Key order of `site.json` is
+  new-file page with content, the edit page as `{url, prefill: false}`, `forks/new`; GitHub: new-file page with
+  `value`, the edit page as `{url, prefill: false}`, `/fork`; GitLab 19.4's editor loads the stored file through the
+  API and drops `?content=`, found 2026-11-21), checked with the core's `CheckSite` before writing. Key order of `site.json` is
   kept readable (fieldalignment exemptions). Downloading and verifying the zip and publishing stay with the wrappers
   (next: the GitLab component with a `pages` job, then the Action); the binary never touches the network. Checked
   with the real `v0.3.3` zip, verified against `checksums.txt` and its signature.
