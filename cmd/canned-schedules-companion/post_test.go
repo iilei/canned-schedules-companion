@@ -328,6 +328,10 @@ func TestPreviewPostNoSchedule(t *testing.T) {
 		"TEST_COMPANION_TOKEN",
 		"--label",
 		"Schedule",
+		"--link",
+		"All files=https://example.com/all",
+		"--note",
+		"30 days",
 	}
 
 	out := postTo(t, append(args, none)...)
@@ -344,7 +348,7 @@ func TestPreviewPostNoSchedule(t *testing.T) {
 	postTo(t, append(args, none)...)
 
 	if !slices.Equal(f.writes[1:], []string{"create", "label +Schedule", "update", "label -Schedule"}) ||
-		!strings.Contains(f.comments[0], "holds no schedule") {
+		!strings.Contains(f.comments[0], "holds no schedule") || strings.Contains(f.comments[0], "All files") {
 		t.Errorf("edited away: writes %q, comments %q", f.writes, f.comments)
 	}
 }

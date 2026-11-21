@@ -109,6 +109,11 @@ func post(f *postFlags, dir string, stdout io.Writer) error {
 	none := preview.IsNoSchedule(raw)
 	valid = valid && !none
 
+	// The notice stands alone: links to files (the reports of text that isn't a request) would only add noise.
+	if none {
+		f.links, f.note = nil, ""
+	}
+
 	token := os.Getenv(f.tokenEnv)
 	if token == "" {
 		return fmt.Errorf("%w: set %s", errToken, f.tokenEnv)

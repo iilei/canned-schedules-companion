@@ -102,7 +102,7 @@ With `--label`, the label says whether the request is valid: added when it is, r
 set it, so it means "holds a valid schedule".
 
 Text without a schedule directive (one only shown in backticks or a code block doesn't count) is not a request:
-`preview render` exits 0 and writes a short notice as the comment, and `preview post` posts it only over an earlier
+`preview render` exits 0 and writes a short notice as the comment, and `preview post` posts it (without links) only over an earlier
 comment, when the schedule was edited away, and removes the label. An issue that never held a schedule gets nothing.
 
 | Flag                        | Meaning                                                                         |
@@ -244,7 +244,7 @@ jobs:
 | `dry-run`              | `true` writes no comment but says what would change; the files are still uploaded       | `false`               |
 
 Outputs: `valid` (`true` or `false`), `schedule` (`false` when the issue holds no schedule), `out-dir`, `svg-url`
-(valid requests only) and `files-url`.
+(valid requests only) and `files-url` (not for an issue without a schedule).
 
 The zip also holds the request exactly as submitted, named after its origin, for example
 `acme-catalog-issue-12.md`.
