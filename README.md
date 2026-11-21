@@ -78,7 +78,8 @@ Flags with the canned-schedules CLI's names and meaning: `--sample-interval`, `-
 `--error-unless-alert-pattern`, `--set-config-at` / `--set-config-value` (repeatable pairs) and
 `--preview-downsample N`.
 
-Exit codes: 0 valid, 1 the request has errors (the files are still written), 2 unusable command line or input.
+Exit codes: 0 valid or no schedule at all, 1 the request has errors (the files are still written), 2 unusable command
+line or input.
 
 ## preview post
 
@@ -99,6 +100,10 @@ the newer text posts instead. Comments from earlier releases have no such record
 
 With `--label`, the label says whether the request is valid: added when it is, removed when it isn't. Only CI should
 set it, so it means "holds a valid schedule".
+
+Text without a schedule directive (one only shown in backticks or a code block doesn't count) is not a request:
+`preview render` exits 0 and writes a short notice as the comment, and `preview post` posts it only over an earlier
+comment, when the schedule was edited away, and removes the label. An issue that never held a schedule gets nothing.
 
 | Flag                        | Meaning                                                                         |
 | --------------------------- | ------------------------------------------------------------------------------- |
@@ -238,7 +243,8 @@ jobs:
 | `label`                | added when the request is valid, removed when not; empty leaves labels alone            | `Schedule`            |
 | `dry-run`              | `true` writes no comment but says what would change; the files are still uploaded       | `false`               |
 
-Outputs: `valid` (`true` or `false`), `out-dir`, `svg-url` (valid requests only) and `files-url`.
+Outputs: `valid` (`true` or `false`), `schedule` (`false` when the issue holds no schedule), `out-dir`, `svg-url`
+(valid requests only) and `files-url`.
 
 The zip also holds the request exactly as submitted, named after its origin, for example
 `acme-catalog-issue-12.md`.

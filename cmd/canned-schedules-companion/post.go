@@ -105,6 +105,10 @@ func post(f *postFlags, dir string, stdout io.Writer) error {
 		return err
 	}
 
+	// Text without a schedule is never valid, whatever the report says (a heading and prose make an empty one).
+	none := preview.IsNoSchedule(raw)
+	valid = valid && !none
+
 	token := os.Getenv(f.tokenEnv)
 	if token == "" {
 		return fmt.Errorf("%w: set %s", errToken, f.tokenEnv)
@@ -138,7 +142,7 @@ func post(f *postFlags, dir string, stdout io.Writer) error {
 		return nil
 	}
 
-	if err := upsert(ctx, f, t, stamp, stdout); err != nil {
+	if err := upsert(ctx, f, t, stamp, none, stdout); err != nil {
 		return err
 	}
 
@@ -146,13 +150,21 @@ func post(f *postFlags, dir string, stdout io.Writer) error {
 }
 
 // upsert leaves a comment with the same stamp alone: the same text, tool and options give the same comment. A
-// comment without a stamp (earlier releases) or with another one is rendered again.
-func upsert(ctx context.Context, f *postFlags, t *target, stamp preview.Stamp, stdout io.Writer) error {
+// comment without a stamp (earlier releases) or with another one is rendered again. Text without a schedule (none)
+// replaces an earlier comment but never starts one, so the bot stays silent on issues that aren't requests.
+func upsert(ctx context.Context, f *postFlags, t *target, stamp preview.Stamp, none bool, stdout io.Writer) error {
 	u := &forge.Upsert{Repo: f.repo, Issue: f.issue, Marker: preview.Marker, Author: t.author, DryRun: true}
 
 	plan, err := t.upsert(ctx, u)
 	if err != nil {
 		return err
+	}
+
+	if none && plan.Action == forge.ActionCreate {
+		fmt.Fprintf(stdout, "%s#%d holds no schedule and has no comment from this step, so there is nothing to post\n",
+			f.repo, f.issue)
+
+		return nil
 	}
 
 	if old, ok := preview.ParseStamp(plan.Existing); ok && old == stamp && len(plan.Delete) == 0 {

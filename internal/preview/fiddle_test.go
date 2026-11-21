@@ -99,7 +99,7 @@ func TestFiddleLinkTooLong(t *testing.T) {
 	t.Parallel()
 
 	// Invalid (the name ends in !), so the request travels as written: 48 KB, too long for one link.
-	long := "# Office Hours!\n\n" + strings.Repeat("Some prose.\n", 4000)
+	long := "# Office Hours!\n\n> [!SCHEDULE-BASE] Off\n\n" + strings.Repeat("Some prose.\n", 4000)
 
 	u, _ := preview.ParseFiddleBase("https://schedules.example.com/")
 

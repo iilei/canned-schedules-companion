@@ -44,8 +44,12 @@ talks to a forge lives here.
     (`contains()` ignores case) or the issue has the label. The component runs on open, reopen and description
     changes (no longer on label changes, so its own label can't start it) and checks issues whose description
     matches `[!schedule` (jq, case-insensitive) or that have the label.
-  - **Not yet:** silence for bodies with no directive (needs core `v0.3.2`'s `Result.HasDirectives`), then the
-    core's templates and example drop their label.
+  - **Silent without a schedule (2026-11-21, core `v0.3.2`'s `Result.HasDirectives`):** `preview render` exits 0
+    for text without a directive (a code span or block doesn't count) and writes the reports and a comment of the
+    marker line plus `preview.NoSchedule`, no schedule files. `preview post` never starts a comment with it, replaces
+    an earlier one (the schedule was edited away, so no stale preview stays) and removes the label. The action's new
+    `schedule` output is false then, and it neither uploads the week nor fails. Checked live on GitLab CE 19.4.1.
+  - **Next:** the core's templates and example drop their label once a release has all this.
 - **Evaluation flags keep the core CLI's names and meaning** (`--require-base true|false` takes a value), so a
   `canned-schedules.args` line works here too.
 - **Exit codes:** 0 valid, 1 request errors (files still written), 2 usage or environment.

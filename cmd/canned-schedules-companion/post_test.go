@@ -303,6 +303,52 @@ func TestPreviewPostGitLab(t *testing.T) {
 	}
 }
 
+// TestPreviewPostNoSchedule: an issue without a schedule gets no comment, and loses the label; when its schedule was
+// edited away, the earlier comment says so instead of showing a stale preview.
+func TestPreviewPostNoSchedule(t *testing.T) {
+	t.Setenv("TEST_COMPANION_TOKEN", "secret")
+
+	f := &fakeForge{labels: []string{"Schedule"}}
+	srv := httptest.NewServer(http.HandlerFunc(f.github))
+
+	defer srv.Close()
+
+	none, text := renderTo(t, "../../testdata/no-schedule.md", exitOK)
+	f.body = text
+	args := []string{
+		"--forge",
+		"github",
+		"--repo",
+		"o/r",
+		"--issue",
+		"7",
+		"--api-url",
+		srv.URL,
+		"--token-env",
+		"TEST_COMPANION_TOKEN",
+		"--label",
+		"Schedule",
+	}
+
+	out := postTo(t, append(args, none)...)
+	if !strings.Contains(out, "nothing to post") || !slices.Equal(f.writes, []string{"label -Schedule"}) {
+		t.Fatalf("no comment yet: %q, writes %q", out, f.writes)
+	}
+
+	valid, text := renderTo(t, "../../testdata/office-hours.md", exitOK)
+	f.body = text
+	postTo(t, append(args, valid)...)
+
+	none, text = renderTo(t, "../../testdata/no-schedule.md", exitOK)
+	f.body = text
+	postTo(t, append(args, none)...)
+
+	if !slices.Equal(f.writes[1:], []string{"create", "label +Schedule", "update", "label -Schedule"}) ||
+		!strings.Contains(f.comments[0], "holds no schedule") {
+		t.Errorf("edited away: writes %q, comments %q", f.writes, f.comments)
+	}
+}
+
 func TestPreviewPostUsage(t *testing.T) {
 	t.Setenv("TEST_COMPANION_EMPTY", "")
 

@@ -23,6 +23,11 @@ const (
 // minFence is the shortest fence around the text form; it grows past any tilde run inside.
 const minFence = 8
 
+// NoSchedule is the comment's text, after the marker line, for a request that holds no schedule directive: an issue
+// that only asks about the syntax, or one whose schedule was edited away. Forge steps post it only over an earlier
+// comment, so the issue keeps no stale preview, and never start a comment with it.
+const NoSchedule = "This issue holds no schedule (any more), so there is nothing to check.\n"
+
 // Names lists every file Render can produce, so a caller can remove stale ones first.
 var Names = []string{ReportMarkdown, ReportJSON, Comment, ScheduleJSON, ScheduleText, ScheduleSVG}
 
@@ -31,6 +36,9 @@ var Names = []string{ReportMarkdown, ReportJSON, Comment, ScheduleJSON, Schedule
 type Result struct {
 	Files map[string][]byte
 	Valid bool
+	// Schedule is false for text without a schedule directive (Result.HasDirectives in the core): it gets the
+	// reports and the NoSchedule comment, and is neither valid nor an error.
+	Schedule bool
 }
 
 // Render evaluates src (named file in the reports) with opts, which must plan a preview (opts.Preview). With a
@@ -45,7 +53,7 @@ func Render(src []byte, file string, opts *cs.Options, fiddle *url.URL, tool str
 	}
 
 	rep := r.Report(file)
-	res := &Result{Valid: r.Valid(), Files: map[string][]byte{}}
+	res := &Result{Valid: r.Valid(), Schedule: r.HasDirectives(), Files: map[string][]byte{}}
 
 	if res.Files[ReportMarkdown], err = rep.Markdown(); err != nil {
 		return nil, err
@@ -53,6 +61,15 @@ func Render(src []byte, file string, opts *cs.Options, fiddle *url.URL, tool str
 
 	if res.Files[ReportJSON], err = rep.JSON(); err != nil {
 		return nil, err
+	}
+
+	stamp := Stamp{Body: BodyDigest(src), Tool: toolName(tool), Args: ArgsDigest(opts, fiddle)}
+
+	if !res.Schedule {
+		res.Valid = false
+		res.Files[Comment] = []byte(stamp.Line() + "\n" + NoSchedule)
+
+		return res, nil
 	}
 
 	if r.Valid() {
@@ -69,7 +86,6 @@ func Render(src []byte, file string, opts *cs.Options, fiddle *url.URL, tool str
 		}
 	}
 
-	stamp := Stamp{Body: BodyDigest(src), Tool: toolName(tool), Args: ArgsDigest(opts, fiddle)}
 	res.Files[Comment] = comment(stamp, res.Files[ReportMarkdown], res.Files[ScheduleText])
 
 	if fiddle != nil {
@@ -103,6 +119,13 @@ func comment(stamp Stamp, report, text []byte) []byte {
 	}
 
 	return b.Bytes()
+}
+
+// IsNoSchedule reports whether comment is the NoSchedule comment Render wrote for text without a schedule.
+func IsNoSchedule(comment []byte) bool {
+	_, rest, ok := strings.Cut(string(comment), "\n")
+
+	return ok && rest == NoSchedule
 }
 
 // Fence returns a tilde fence longer than any tilde run in text, at least minFence long.
