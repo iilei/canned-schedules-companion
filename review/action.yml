@@ -1,0 +1,179 @@
+name: Canned schedule review
+description: Reviews pull requests that change the catalog's schedules and keeps one comment on them up to date, with the label and a title named after the schedules.
+branding:
+  icon: calendar
+  color: green
+
+# The caller runs it on pull_request (paths: the catalog's *.canned-schedule.md files), checks out with fetch-depth 0,
+# and grants contents: read, pull-requests: write and issues: write (comments and labels go through the issues API).
+# The flags come from the args file on the base branch, so a pull request can't loosen its own check. Pull requests
+# from forks get a read-only token: the review then goes to the job summary only. Inputs reach the shell only through
+# environment variables, never through ${{ }} inside a script.
+inputs:
+  version:
+    description: The canned-schedules-companion release to install. The default is the release this action belongs to.
+    default: "0.3.2"
+  catalog-dir:
+    description: The catalog's folder; only its *.canned-schedule.md files are reviewed.
+    default: schedules
+  args-file:
+    description: The flags to check with, read from the base branch, as canned-schedules.args. A missing file means none.
+    default: canned-schedules.args
+  label:
+    description: Added when every changed schedule is valid, removed otherwise. Empty leaves labels alone.
+    default: Schedule
+  retitle:
+    description: true names the pull request after its schedules while it has the web editor's default title ("Create night-shift.canned-schedule.md").
+    default: "true"
+  token:
+    description: The token that comments on, labels and renames the pull request.
+    default: ${{ github.token }}
+  comment-author:
+    description: The login behind the token. Only its comments count as this step's own.
+    default: github-actions[bot]
+  dry-run:
+    description: true reads the pull request and says what would change, but writes nothing.
+    default: "false"
+
+outputs:
+  valid:
+    description: true when every changed schedule is valid.
+    value: ${{ steps.render.outputs.valid }}
+  out-dir:
+    description: The directory with the comment and the summary.
+    value: ${{ steps.setup.outputs.out-dir }}
+
+runs:
+  using: composite
+  steps:
+    - id: setup
+      name: Check the inputs and prepare a working directory
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        RETITLE: ${{ inputs.retitle }}
+        DRY_RUN: ${{ inputs.dry-run }}
+        EVENT: ${{ github.event_name }}
+        LABEL: ${{ inputs.label }}
+      run: |
+        set -euo pipefail
+        fail() {
+          printf '::error::%s\n' "$1"
+          exit 2
+        }
+        [[ $EVENT == pull_request ]] || fail "run it on pull_request, not $EVENT"
+        [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || fail 'version: want a release such as 1.2.3'
+        [[ $RETITLE == true || $RETITLE == false ]] || fail 'retitle: want true or false'
+        [[ $DRY_RUN == true || $DRY_RUN == false ]] || fail 'dry-run: want true or false'
+        [[ $LABEL != *$'\n'* ]] || fail 'label: must be one line'
+        git -C "$GITHUB_WORKSPACE" rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
+          fail 'check out the repository first (actions/checkout with fetch-depth: 0)'
+        work_dir=$(mktemp -d "$RUNNER_TEMP/canned-schedule-review.XXXXXX")
+        {
+          printf 'work-dir=%s\n' "$work_dir"
+          printf 'out-dir=%s\n' "$work_dir/review"
+        } >> "$GITHUB_OUTPUT"
+
+    # Verifies the release's build provenance attestation on install.
+    - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+      with:
+        version: 2026.10.19 # mise itself; pinned, see CLAUDE.md
+        install_args: github:iilei/canned-schedules-companion@${{ inputs.version }}
+        working_directory: ${{ steps.setup.outputs.work-dir }}
+        github_token: ${{ inputs.token }}
+        cache: false
+
+    # Exit 1 means a schedule has errors: the comment still has to reach the pull request, so the job fails only at
+    # the end.
+    - id: render
+      name: Check the changed schedules
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        VERSION: ${{ inputs.version }}
+        CATALOG_DIR: ${{ inputs.catalog-dir }}
+        ARGS_FILE: ${{ inputs.args-file }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        OUT_DIR: ${{ steps.setup.outputs.out-dir }}
+        WORK_DIR: ${{ steps.setup.outputs.work-dir }}
+      run: |
+        set -uo pipefail
+        fail() {
+          printf '::error::%s\n' "$1"
+          exit 2
+        }
+        git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null && git cat-file -e "$HEAD_SHA^{commit}" 2>/dev/null ||
+          fail 'the base or head commit is missing: check out with fetch-depth: 0'
+
+        # The flags of the base branch: a pull request can't loosen its own check.
+        args=()
+        if [[ -n $ARGS_FILE ]] && git cat-file -e "$BASE_SHA:$ARGS_FILE" 2>/dev/null; then
+          while IFS= read -r line || [[ -n $line ]]; do
+            line=${line%$'\r'}
+            case $line in '' | '#'*) continue ;; esac
+            args+=("$line")
+          done < <(git show "$BASE_SHA:$ARGS_FILE")
+        fi
+
+        # The schedule files the pull request adds or changes since it branched off (deleted ones have nothing to
+        # check), as they stand in the checkout.
+        files=()
+        while IFS= read -r f; do
+          [[ -n $f ]] && files+=("$f")
+        done < <(git diff --name-only --diff-filter=ACMR "$BASE_SHA...$HEAD_SHA" -- "$CATALOG_DIR/*.canned-schedule.md")
+
+        # The binary's path, looked up from the working directory: mise must not read a mise.toml in the checkout,
+        # but the files are named as the repository names them, so the review runs in the checkout.
+        bin=$(cd "$WORK_DIR" && mise exec "github:iilei/canned-schedules-companion@$VERSION" -- \
+          sh -c 'command -v canned-schedules-companion') || fail 'canned-schedules-companion is not installed'
+        rc=0
+        "$bin" review render --out-dir "$OUT_DIR" ${args[@]+"${args[@]}"} ${files[@]+"${files[@]}"} || rc=$?
+        if [[ $rc -gt 1 || ! -f $OUT_DIR/comment.md ]]; then
+          fail "the review could not be rendered (exit code $rc)"
+        fi
+        valid=false
+        if [[ $rc -eq 0 ]]; then valid=true; fi
+        printf 'valid=%s\n' "$valid" >> "$GITHUB_OUTPUT"
+        cat "$OUT_DIR/comment.md" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Post or update the review on the pull request
+      shell: bash
+      working-directory: ${{ steps.setup.outputs.work-dir }}
+      env:
+        VERSION: ${{ inputs.version }}
+        NUMBER: ${{ github.event.pull_request.number }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        AUTHOR: ${{ inputs.comment-author }}
+        LABEL: ${{ inputs.label }}
+        RETITLE: ${{ inputs.retitle }}
+        DRY_RUN: ${{ inputs.dry-run }}
+        OUT_DIR: ${{ steps.setup.outputs.out-dir }}
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+        if [[ $HEAD_REPO != "$GITHUB_REPOSITORY" ]]; then
+          printf '::notice::A pull request from a fork gets a read-only token: the review is in the job summary only.\n'
+          exit 0
+        fi
+        flags=(
+          --forge github
+          --repo "$GITHUB_REPOSITORY"
+          --merge-request "$NUMBER"
+          --head-sha "$HEAD_SHA"
+          --api-url "$GITHUB_API_URL"
+          --author "$AUTHOR"
+        )
+        if [[ -n $LABEL ]]; then flags+=(--label "$LABEL"); fi
+        if [[ $RETITLE == true ]]; then flags+=(--retitle); fi
+        if [[ $DRY_RUN == true ]]; then flags+=(--dry-run); fi
+        mise exec "github:iilei/canned-schedules-companion@$VERSION" -- canned-schedules-companion review post \
+          "${flags[@]}" "$OUT_DIR"
+
+    - name: Fail when a schedule has errors
+      if: steps.render.outputs.valid == 'false'
+      shell: bash
+      run: |
+        printf '::error::A changed schedule has errors. The review on the pull request lists them.\n'
+        exit 1

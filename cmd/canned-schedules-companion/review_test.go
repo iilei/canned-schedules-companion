@@ -22,6 +22,15 @@ type fakeMR struct {
 	mu         sync.Mutex
 }
 
+// fakePR is a minimal GitHub pull request #1 in o/catalog: title, head, labels, comments and a write log.
+type fakePR struct {
+	title, sha string
+	labels     []string
+	comments   []string
+	writes     []string
+	mu         sync.Mutex
+}
+
 func (f *fakeMR) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -187,7 +196,7 @@ func TestReviewUsage(t *testing.T) {
 	dir := t.TempDir()
 
 	for name, args := range map[string][]string{
-		"github":   {"review", "post", "--forge", "github", "--repo", "o/r", "--merge-request", "1", dir},
+		"forge":    {"review", "post", "--forge", "bitbucket", "--repo", "o/r", "--merge-request", "1", dir},
 		"no forge": {"review", "post", "--repo", "g/p", "--merge-request", "1", dir},
 		"no mr":    {"review", "post", "--forge", "gitlab", "--repo", "g/p", dir},
 		"no file":  {"review", "render", "--out-dir", dir, filepath.Join(dir, "missing.canned-schedule.md")},
@@ -196,5 +205,113 @@ func TestReviewUsage(t *testing.T) {
 		if code := run(args, &stdout, &stderr); code != exitUsage {
 			t.Errorf("%s: exit %d, want 2", name, code)
 		}
+	}
+}
+
+func (f *fakePR) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	const repo = "/repos/o/catalog"
+
+	switch path := r.URL.EscapedPath(); {
+	case r.Header.Get("Authorization") != "Bearer secret":
+		w.WriteHeader(http.StatusUnauthorized)
+	case path == repo+"/pulls/1" && r.Method == http.MethodGet:
+		labels := make([]map[string]string, 0, len(f.labels))
+		for _, l := range f.labels {
+			labels = append(labels, map[string]string{"name": l})
+		}
+
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"title": f.title, "head": map[string]string{"sha": f.sha}, "labels": labels,
+		})
+	case path == repo+"/pulls/1" && r.Method == http.MethodPatch:
+		var in map[string]string
+
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		f.title = in["title"]
+		f.writes = append(f.writes, "title "+in["title"])
+		_, _ = w.Write([]byte("{}"))
+	case path == repo+"/issues/1/labels" && r.Method == http.MethodPost:
+		var in map[string][]string
+
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		f.labels = append(f.labels, in["labels"]...)
+		f.writes = append(f.writes, "label +"+strings.Join(in["labels"], ","))
+		_, _ = w.Write([]byte("[]"))
+	case strings.HasPrefix(path, repo+"/issues/1/labels/") && r.Method == http.MethodDelete:
+		l := strings.TrimPrefix(path, repo+"/issues/1/labels/")
+		f.labels = slices.DeleteFunc(f.labels, func(x string) bool { return x == l })
+		f.writes = append(f.writes, "label -"+l)
+		_, _ = w.Write([]byte("[]"))
+	case path == repo+"/issues/1/comments" && r.Method == http.MethodGet:
+		list := make([]map[string]any, 0, len(f.comments))
+		for _, c := range f.comments {
+			list = append(list, map[string]any{
+				"id": 7, "body": c, "user": map[string]string{"login": "github-actions[bot]"},
+				"html_url": "https://github.example/o/catalog/pull/1#issuecomment-7",
+			})
+		}
+
+		_ = json.NewEncoder(w).Encode(list)
+	case path == repo+"/issues/1/comments" && r.Method == http.MethodPost,
+		path == repo+"/issues/comments/7" && r.Method == http.MethodPatch:
+		var in struct {
+			Body string `json:"body"`
+		}
+
+		_ = json.NewDecoder(r.Body).Decode(&in)
+
+		if r.Method == http.MethodPost {
+			f.comments = append(f.comments, in.Body)
+			f.writes = append(f.writes, "create")
+		} else {
+			f.comments[0] = in.Body
+			f.writes = append(f.writes, "update")
+		}
+
+		_, _ = w.Write([]byte(`{"id": 7, "html_url": "https://github.example/o/catalog/pull/1#issuecomment-7"}`))
+	default:
+		http.Error(w, "unexpected "+r.Method+" "+path, http.StatusNotFound)
+	}
+}
+
+// TestReviewGitHub: the same review on a pull request, through GitHub's API with the workflow token's defaults.
+func TestReviewGitHub(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "secret")
+
+	f := &fakePR{title: "Create night-shift.canned-schedule.md", sha: "abc"}
+	srv := httptest.NewServer(f)
+
+	defer srv.Close()
+
+	dir := t.TempDir()
+	t.Chdir(dir)
+	writeSchedule(t, dir, "night-shift.canned-schedule.md",
+		"# Night Shift\n\n> [!SCHEDULE-STATE] Medium\n> - `22:00` to `06:00` MON-FRI\n")
+
+	var stdout, stderr bytes.Buffer
+	if code := run(
+		[]string{"review", "render", "--out-dir", "out", "schedules/night-shift.canned-schedule.md"}, &stdout, &stderr,
+	); code != exitOK {
+		t.Fatalf("render: exit %d: %s", code, stderr.String())
+	}
+
+	post := []string{
+		"review", "post", "--forge", "github", "--repo", "o/catalog", "--merge-request", "1",
+		"--head-sha", "abc", "--api-url", srv.URL, "--label", "Schedule", "--retitle", "out",
+	}
+
+	if o := postReviewTo(t, post...); !strings.Contains(o, "o/catalog#1") {
+		t.Errorf("output %q names the pull request as owner/repo#N", o)
+	}
+
+	if !slices.Equal(f.writes, []string{"create", "label +Schedule", "title Schedule: Night Shift"}) {
+		t.Fatalf("writes %q", f.writes)
+	}
+
+	if o := postReviewTo(t, post...); !strings.Contains(o, "up to date") || len(f.writes) != 3 {
+		t.Errorf("same files: %q, writes %q", o, f.writes)
 	}
 }
