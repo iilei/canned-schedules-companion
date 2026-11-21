@@ -163,7 +163,7 @@ component will do both.
 | `--forge name`        | where proposals go: `github` or `gitlab` (required, never guessed)                          |
 | `--project path`      | `OWNER/REPO`, on GitLab `GROUP/PROJECT` with any subgroups (required)                       |
 | `--branch name`       | the branch proposals target, usually the default branch (required)                          |
-| `--server-url URL`    | the forge's web address for self-managed instances (default: github.com or gitlab.com)      |
+| `--server-url URL`    | the forge's web address (default: github.com or gitlab.com); https, http only for localhost |
 | `--catalog-dir dir`   | the catalog's folder in the repository (default `schedules`)                                |
 | `--repo-root dir`     | the checked-out repository, where the catalog is read (default `.`)                         |
 | `--no-catalog`        | the catalog has no schedules yet                                                            |

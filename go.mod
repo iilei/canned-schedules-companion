@@ -2,7 +2,7 @@ module github.com/iilei/canned-schedules-companion
 
 go 1.26.0
 
-require github.com/iilei/canned-schedules v0.3.3
+require github.com/iilei/canned-schedules v0.3.4
 
 require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 // indirect
