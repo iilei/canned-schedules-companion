@@ -107,3 +107,29 @@ func TestFence(t *testing.T) {
 		}
 	}
 }
+
+// TestNoSchedule: text without a schedule directive (here it quotes the syntax in a code span) gets the reports and
+// the NoSchedule comment, no schedule files, and counts as neither valid nor an error.
+func TestNoSchedule(t *testing.T) {
+	t.Parallel()
+
+	res := render(t, "../../testdata/no-schedule.md")
+	if res.Schedule || res.Valid {
+		t.Fatalf("schedule %v, valid %v; want neither", res.Schedule, res.Valid)
+	}
+
+	for _, name := range []string{preview.ScheduleJSON, preview.ScheduleText, preview.ScheduleSVG} {
+		if res.Files[name] != nil {
+			t.Errorf("%s must not be written", name)
+		}
+	}
+
+	c := res.Files[preview.Comment]
+	if _, ok := preview.ParseStamp(string(c)); !ok || !preview.IsNoSchedule(c) {
+		t.Errorf("comment %q", c)
+	}
+
+	if preview.IsNoSchedule(render(t, "../../testdata/office-hours.md").Files[preview.Comment]) {
+		t.Error("a request's comment is not the NoSchedule one")
+	}
+}

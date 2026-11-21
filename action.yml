@@ -44,8 +44,11 @@ inputs:
 
 outputs:
   valid:
-    description: true when the request has no errors, false when it has.
+    description: true when the request has no errors, false when it has or holds no schedule.
     value: ${{ steps.render.outputs.valid }}
+  schedule:
+    description: false when the issue holds no schedule directive; its comment, if any, then says so.
+    value: ${{ steps.render.outputs.schedule }}
   out-dir:
     description: The directory with the files.
     value: ${{ steps.setup.outputs.out-dir }}
@@ -138,8 +141,11 @@ runs:
         fi
         # The request exactly as submitted, named after where it came from.
         cp request.md "$OUT_DIR/$SOURCE_FILE"
-        if [[ $rc -eq 0 ]]; then valid=true; else valid=false; fi
-        printf 'valid=%s\n' "$valid" >> "$GITHUB_OUTPUT"
+        # Exit 0 without the week means the issue holds no schedule: neither valid nor an error.
+        schedule=true valid=false
+        if [[ $rc -eq 0 && -f $OUT_DIR/schedule.svg ]]; then valid=true; fi
+        if [[ $rc -eq 0 && ! -f $OUT_DIR/schedule.svg ]]; then schedule=false; fi
+        printf 'valid=%s\nschedule=%s\n' "$valid" "$schedule" >> "$GITHUB_OUTPUT"
 
     # The week on its own, not zipped, so the link downloads the SVG itself. Only a valid request has one.
     - id: svg
@@ -201,7 +207,7 @@ runs:
           "${flags[@]}" "$OUT_DIR"
 
     - name: Fail when the request has errors
-      if: steps.render.outputs.valid == 'false'
+      if: steps.render.outputs.schedule == 'true' && steps.render.outputs.valid == 'false'
       shell: bash
       run: |
         printf '::error::The schedule request has errors. The comment on the issue lists them.\n'

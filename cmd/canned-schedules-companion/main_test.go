@@ -43,6 +43,14 @@ func TestPreviewRender(t *testing.T) {
 	if c, _ := os.ReadFile(filepath.Join(out, "comment.md")); !strings.Contains(string(c), "invalid-name") {
 		t.Errorf("comment.md must report the error:\n%s", c)
 	}
+
+	// Text without a schedule: exit 0, it isn't an error, and stdout says why there is nothing to check.
+	stdout.Reset()
+
+	if code := run([]string{"preview", "render", "--out-dir", out, "../../testdata/no-schedule.md"}, &stdout,
+		&stderr); code != exitOK || !strings.Contains(stdout.String(), "holds no schedule directive") {
+		t.Errorf("no schedule: exit %d, %q", code, stdout.String())
+	}
 }
 
 func TestEvaluationFlags(t *testing.T) {

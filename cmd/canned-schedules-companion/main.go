@@ -124,6 +124,12 @@ func previewRender(args []string, stdout, stderr io.Writer) int {
 
 	fmt.Fprintf(stdout, "wrote %s/%s\n", outDir, preview.Comment)
 
+	if !res.Schedule {
+		fmt.Fprintf(stdout, "%s holds no schedule directive, so there is nothing to check\n", file)
+
+		return exitOK
+	}
+
 	if !res.Valid {
 		return exitInvalid
 	}
