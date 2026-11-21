@@ -218,8 +218,8 @@ issue preview's `CANNED_SCHEDULES_TOKEN`, with the Developer role to label and r
 
 ```yaml
 include:
-  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.3/templates/review.yml
-    integrity: sha256-DJLfhDO94c03d37GAVP7nAcKeJ5CxEakG7I/jFuRQ7k=
+  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.4/templates/review.yml
+    integrity: sha256-MOJVrB+VBlQXNAMjfhYXBcD+2HCUN0o+ea6tDJziZpg=
 ```
 
 Merge requests from forks run their pipelines in the fork, where the variable isn't set; let the project run fork
@@ -322,8 +322,8 @@ labels takes the Reporter role or more.
 
 ```yaml
 include:
-  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.3/templates/promote.yml
-    integrity: sha256-Qap5rueD2DVq4QkVUFEamB+8Y3VV8xbq00FU/AFXkiI=
+  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.4/templates/promote.yml
+    integrity: sha256-uphXB59HFeQVrM/xLG4yxJeNvhvR0TZ28h57N52SCIM=
 ```
 
 Inputs: `stage` (`deploy`), `version`, `image`, `approved-label`, `catalog-dir`, `args-file` (read from the
@@ -351,8 +351,8 @@ inline. GitLab can't start a pipeline from an issue event by itself, so a webhoo
 
    ```yaml
    include:
-     - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.3/templates/issue-preview.yml
-       integrity: sha256-8ITz/ONivDt+G5+4l5l4zT0MoodHV3ApL2UXaVkBuwM=
+     - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.4/templates/issue-preview.yml
+       integrity: sha256-AvuyAuZdteN6Xv5wxYEuD+EFNUheZRehYccd4m45t34=
    ```
 
    GitLab rejects the file if it doesn't match `integrity`. Inputs go under `inputs:` of the same entry.
@@ -388,8 +388,8 @@ playground checks as the issue preview does), verifies both with GPG against the
 
 ```yaml
 include:
-  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.3/templates/playground.yml
-    integrity: sha256-TWh8aYjPYHQagHIYSg7jQI9Np8d0kMWUE2NWaaDHS+s=
+  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.4/templates/playground.yml
+    integrity: sha256-Y1ZnrQvKs4hDKgM+Lng0s70KSXLHn7oLV6F+yupFt9g=
     inputs:
       name: Acme schedules
       fork: true
