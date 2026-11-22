@@ -11,7 +11,7 @@ spec:
       default: test
     version:
       description: The canned-schedules-companion release to install.
-      default: "0.3.6"
+      default: "0.3.7"
       regex: ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$
     image:
       description: The job's image. An image that already contains the binary, curl and jq skips the download.

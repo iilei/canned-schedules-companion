@@ -12,7 +12,7 @@ branding:
 inputs:
   version:
     description: The canned-schedules-companion release to install. The default is the release this action belongs to.
-    default: "0.3.6"
+    default: "0.3.7"
   catalog-dir:
     description: The catalog's folder; only its *.canned-schedule.md files are reviewed.
     default: schedules

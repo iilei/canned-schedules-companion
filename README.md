@@ -231,8 +231,8 @@ issue preview's `CANNED_SCHEDULES_TOKEN`, with the Developer role to label and r
 
 ```yaml
 include:
-  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.6/templates/review.yml
-    integrity: sha256-N6wfT490Bcjh++zNvbqlW3SywiX8tFCk+vzWkCYeIYQ=
+  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.7/templates/review.yml
+    integrity: sha256-MMyaH77cMIzJ+NEx2bNlmO2Sjai8cv9mPJNy7PYseRg=
 ```
 
 Merge requests from forks run their pipelines in the fork, where the variable isn't set; let the project run fork
@@ -335,8 +335,8 @@ labels takes the Reporter role or more.
 
 ```yaml
 include:
-  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.6/templates/promote.yml
-    integrity: sha256-XhKeBCedUMuWwXfnIuUHjeLeDtnG+SS1eMWOnuydgV0=
+  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.7/templates/promote.yml
+    integrity: sha256-UmZcbECNMDoh58sRWuTFV4q3l4Xa8isKJ74iDqDdJ+A=
 ```
 
 Inputs: `stage` (`deploy`), `version`, `image`, `approved-label`, `catalog-dir`, `args-file` (read from the
@@ -517,8 +517,8 @@ which needs the script's tools (`curl`, `jq`, the AWS CLI, …). One publish run
 
 ```yaml
 include:
-  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.6/templates/publish.yml
-    integrity: sha256-f6IQjdq0gZseuz5nbIuG9slpUI+qJuTRGh6KQYsmJx8=
+  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.7/templates/publish.yml
+    integrity: sha256-5R6Py7GDsSz9QUtsh9htai2cu6zZ69WX6lBEITNW7r4=
     inputs:
       post-fetch-script: scripts/upload-schedules.sh
 ```
@@ -600,8 +600,8 @@ inline. GitLab can't start a pipeline from an issue event by itself, so a webhoo
 
    ```yaml
    include:
-     - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.6/templates/issue-preview.yml
-       integrity: sha256-oRvMo2dYPouS6mbfE+aFGL1HVmpj/v50Be009FS5eY8=
+     - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.7/templates/issue-preview.yml
+       integrity: sha256-oAkdpOZr/5fW4KWUrt+CFQvE+zSM2SklO/XSJu4hqSs=
    ```
 
    GitLab rejects the file if it doesn't match `integrity`. Inputs go under `inputs:` of the same entry.
@@ -637,8 +637,8 @@ playground checks as the issue preview does), verifies both with GPG against the
 
 ```yaml
 include:
-  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.6/templates/playground.yml
-    integrity: sha256-IFwPBYu7NJxOplS5zdnauBAdQPAkb/NFzNFFf9UZHIY=
+  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.7/templates/playground.yml
+    integrity: sha256-yGLsukrc4Pp4wSO4HjKwHcfsgI7Ec6RC407sc6suUGM=
     inputs:
       name: Acme schedules
       fork: true
