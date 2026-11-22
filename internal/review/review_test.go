@@ -183,3 +183,43 @@ func TestDigests(t *testing.T) {
 		t.Errorf("empty: %v, %v", got, ok)
 	}
 }
+
+func TestWeeks(t *testing.T) {
+	t.Parallel()
+
+	res, err := review.Render([]review.File{
+		{Path: "schedules/night-shift.canned-schedule.md", Src: []byte(night)},
+		{Path: "schedules/broken.canned-schedule.md", Src: []byte("# Broken!\n")},
+	}, opts(), nil, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// One week, for the valid file only, as an SVG.
+	if len(res.Weeks) != 1 || !strings.HasPrefix(string(res.Weeks["week-1.svg"]), "<svg") {
+		t.Fatalf("weeks %d: %.40q", len(res.Weeks), res.Weeks["week-1.svg"])
+	}
+
+	c := string(res.Comment)
+
+	var asked []string
+
+	got, err := review.ReplaceWeeks(c, func(name string) (string, error) {
+		asked = append(asked, name)
+
+		return "/uploads/x/a(1).svg", nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(asked) != 1 || asked[0] != "week-1.svg" ||
+		!strings.Contains(got, "![Week as SVG](/uploads/x/a%281%29.svg)\n") {
+		t.Errorf("asked %q, comment:\n%s", asked, got)
+	}
+
+	// No URL (GitHub, a dry run): the placeholder stays, an HTML comment nobody sees.
+	if same, _ := review.ReplaceWeeks(c, func(string) (string, error) { return "", nil }); same != c {
+		t.Error("an empty URL changed the comment")
+	}
+}

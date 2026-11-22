@@ -7,10 +7,12 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/iilei/canned-schedules-companion/internal/forge"
@@ -22,6 +24,14 @@ import (
 
 // reviewJSON is what review render leaves for review post besides the comment.
 const reviewJSON = "review.json"
+
+// weekName is what a week placeholder may name: a file review render wrote, never a path.
+var weekName = regexp.MustCompile(`^week-\d+\.svg$`)
+
+// uploader is a forge that takes files for its comments to show (GitLab's uploads); GitHub has no such API for bots.
+type uploader interface {
+	Upload(ctx context.Context, repo, name string, data []byte) (string, error)
+}
 
 // reviewForge is what the review needs from a forge: one marked note, and the merge request's (pull request's) head,
 // labels and title.
@@ -102,7 +112,10 @@ func reviewRender(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 
-	for name, data := range map[string][]byte{preview.Comment: res.Comment, reviewJSON: append(summary, '\n')} {
+	out := map[string][]byte{preview.Comment: res.Comment, reviewJSON: append(summary, '\n')}
+	maps.Copy(out, res.Weeks)
+
+	for name, data := range out {
 		if err := writeFile(filepath.Join(*outDir, name), data); err != nil {
 			fmt.Fprintln(stderr, "canned-schedules-companion:", err)
 
@@ -184,7 +197,7 @@ func postReview(f *reviewFlags, dir string, stdout io.Writer) error {
 		return nil
 	}
 
-	if err := upsertReview(ctx, c, f, stamp, string(raw), stdout); err != nil {
+	if err := upsertReview(ctx, c, f, dir, stamp, string(raw), stdout); err != nil {
 		return err
 	}
 
@@ -244,7 +257,7 @@ func (f *reviewFlags) maxBody() int {
 	return preview.GitLabMaxBody
 }
 
-func upsertReview(ctx context.Context, c reviewForge, f *reviewFlags, stamp preview.Stamp, body string,
+func upsertReview(ctx context.Context, c reviewForge, f *reviewFlags, dir string, stamp preview.Stamp, body string,
 	stdout io.Writer,
 ) error {
 	u := &forge.Upsert{
@@ -260,6 +273,10 @@ func upsertReview(ctx context.Context, c reviewForge, f *reviewFlags, stamp prev
 		fmt.Fprintf(stdout, "the review on %s is up to date: %s\n", f.where(), plan.URL)
 
 		return nil
+	}
+
+	if body, err = weeks(ctx, c, f, dir, body, stdout); err != nil {
+		return err
 	}
 
 	if len(body) > f.maxBody() {
@@ -412,4 +429,35 @@ func (f *reviewFlags) applyDefaults() {
 	if f.tokenEnv == "" {
 		f.tokenEnv = tokenEnv
 	}
+}
+
+// weeks uploads each schedule's week and puts the image where the comment's placeholder is, on a forge that shows
+// uploads in comments. Elsewhere the placeholders stay, invisible.
+func weeks(ctx context.Context, c reviewForge, f *reviewFlags, dir, body string, stdout io.Writer) (string, error) {
+	up, ok := c.(uploader)
+	if !ok {
+		return body, nil
+	}
+
+	return review.ReplaceWeeks(body, func(name string) (string, error) {
+		if !weekName.MatchString(name) {
+			return "", fmt.Errorf("%s names an unexpected week file %q", preview.Comment, name)
+		}
+
+		path := filepath.Join(dir, name)
+
+		svg, err := os.ReadFile(path) //nolint:gosec // weekName: a file review render wrote, in the caller's dir.
+		if err != nil {
+			return "", fmt.Errorf("read the week (run review render first): %w", err)
+		}
+
+		upload := preview.UploadName(f.mergeRequest, svg)
+		if f.dryRun {
+			fmt.Fprintf(stdout, "would upload %s to %s\n", upload, f.repo)
+
+			return "", nil
+		}
+
+		return up.Upload(ctx, f.repo, upload, svg)
+	})
 }
