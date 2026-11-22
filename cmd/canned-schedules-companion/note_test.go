@@ -32,8 +32,21 @@ func prepared(t *testing.T) string {
 	out := filepath.Join(t.TempDir(), "publish")
 
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"publish", "prepare", "--merge-request-file", mr, "--out-dir", out, sched}, &stdout,
-		&stderr); code != exitOK {
+	if code := run(
+		[]string{
+			"publish",
+			"prepare",
+			"--merge-request-file",
+			mr,
+			"--path-template",
+			"{slug}/{mr}",
+			"--out-dir",
+			out,
+			sched,
+		},
+		&stdout,
+		&stderr,
+	); code != exitOK {
 		t.Fatalf("prepare: exit %d: %s", code, stderr.String())
 	}
 
