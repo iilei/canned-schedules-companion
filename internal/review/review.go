@@ -16,13 +16,21 @@ import (
 	cs "github.com/iilei/canned-schedules"
 
 	"github.com/iilei/canned-schedules-companion/internal/preview"
+	"github.com/iilei/canned-schedules-companion/internal/publish"
 )
 
 // Marker starts the review comment, with a Stamp like the issue preview's. It ends in a space (see preview.Marker).
 const Marker = "<!-- canned-schedules:merge-request-review "
 
+// DigestsMarker starts the hidden block on the comment's second line that lists the digest of every file that
+// passed, one "<path> <digest>" per line, up to "-->". It is what the review vouches for: publishing compares the
+// merged files with it. Paths can't hold spaces or "-->" (safePath), so the block needs no escaping.
+const DigestsMarker = "<!-- canned-schedules:digests"
+
 // safePath is what a catalog file's path may contain to be shown as is; anything else could carry Markdown into the
 // comment, so it is reported without being echoed.
+const markerEnd = "-->"
+
 var safePath = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
 
 // File is a changed schedule file: its path in the repository and its content at the merge request's head.
@@ -42,8 +50,8 @@ type Result struct {
 }
 
 type checked struct {
-	path, report, text, problem string
-	ok                          bool
+	path, report, text, problem, digest string
+	ok                                  bool
 }
 
 // Render checks files with opts (which must plan a preview, for the week in the comment). A file's name must be
@@ -112,7 +120,7 @@ func check(f File, opts *cs.Options) (checked, string, error) {
 		return c, "", err
 	}
 
-	c.text, c.ok = string(text), true
+	c.text, c.ok, c.digest = string(text), true, publish.Digest(f.Src)
 
 	return c, r.Output.Name, nil
 }
@@ -135,6 +143,15 @@ func comment(stamp preview.Stamp, results []checked) []byte {
 	var b bytes.Buffer
 
 	b.WriteString(stamp.LineFor(Marker) + "\n")
+	b.WriteString(DigestsMarker + "\n")
+
+	for _, c := range results {
+		if c.ok {
+			b.WriteString(c.path + " " + c.digest + "\n")
+		}
+	}
+
+	b.WriteString(markerEnd + "\n")
 	b.WriteString("### Schedule review\n\n")
 
 	failed := 0
@@ -155,7 +172,7 @@ func comment(stamp preview.Stamp, results []checked) []byte {
 	}
 
 	for _, c := range results {
-		b.WriteString("\n" + section(c))
+		b.WriteString("\n" + section(&c))
 	}
 
 	return b.Bytes()
@@ -169,7 +186,7 @@ func count(n int) string {
 	return fmt.Sprintf("%d schedules", n)
 }
 
-func section(c checked) string {
+func section(c *checked) string {
 	var b strings.Builder
 
 	title := "a file with an unusual path"
@@ -188,6 +205,10 @@ func section(c checked) string {
 	}
 
 	fmt.Fprintf(&b, "<details%s><summary>%s: %s</summary>\n\n", open, mark, title)
+
+	if c.digest != "" {
+		b.WriteString("Digest: `" + c.digest + "`\n\n")
+	}
 
 	if c.report != "" {
 		b.WriteString(c.report)
@@ -209,6 +230,34 @@ func section(c checked) string {
 	b.WriteString("\n</details>\n")
 
 	return b.String()
+}
+
+// Digests reads the digests a review comment vouches for, by path. It reports false for a comment without the block
+// (one rendered before it existed, or not a review) or with a malformed one, so a caller treats it as no review.
+func Digests(comment string) (map[string]string, bool) {
+	comment = strings.ReplaceAll(comment, "\r\n", "\n")
+
+	lines := strings.Split(comment, "\n")
+	if len(lines) < 3 || !strings.HasPrefix(lines[0], Marker) || lines[1] != DigestsMarker {
+		return nil, false
+	}
+
+	out := map[string]string{}
+
+	for _, line := range lines[2:] {
+		if line == markerEnd {
+			return out, true
+		}
+
+		p, d, ok := strings.Cut(line, " ")
+		if _, dup := out[p]; !ok || dup || !safePath.MatchString(p) || !publish.IsDigest(d) {
+			return nil, false
+		}
+
+		out[p] = d
+	}
+
+	return nil, false
 }
 
 // Title is the title a merge request gets from its schedules: the name of a single one, or the names joined.

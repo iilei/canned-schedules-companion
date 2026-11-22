@@ -195,6 +195,16 @@ the catalog's rule that **a file is named after its schedule** (`Night Shift` â†
 writes one comment: an overview, then each file's report and week. Paths with characters a catalog file can't have are
 reported without being echoed. Exit codes: 0 all valid, 1 problems, 2 unusable input.
 
+**The comment records what it vouches for:** every file that passed is listed with its digest (`sha256:<64 hex>` of the
+bytes as reviewed) in its section and in a hidden block under the marker line, which [publishing](#publish-prepare)
+reads to tell whether the merged file is the one reviewed:
+
+```text
+<!-- canned-schedules:digests
+schedules/night-shift.canned-schedule.md sha256:a64ca733â€¦
+-->
+```
+
 `review post` keeps **one comment per merge request**, like the issue preview: the same stamp leaves it alone, and when
 the merge request has moved on to another commit than `--head-sha`, nothing is written, so that commit's pipeline
 posts. `--label` adds the label when every schedule is valid and removes it otherwise. `--retitle` names the merge
