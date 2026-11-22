@@ -11,6 +11,7 @@
 //	canned-schedules-companion playground build --site-zip zip --forge github|gitlab --project P --branch B [flags] dir
 //	canned-schedules-companion promote prepare [flags] issue.md
 //	canned-schedules-companion promote open --forge github|gitlab --repo P --issue N --base-branch B [flags] dir
+//	canned-schedules-companion publish fetch --forge github|gitlab --repo P --commit SHA [flags]
 //	canned-schedules-companion publish prepare --merge-request-file merge-request.json [flags] file...
 //
 // Every step splits into local verbs (render, prepare, check), which read and write files only, and forge verbs
@@ -63,6 +64,7 @@ const usage = `usage: canned-schedules-companion preview render [flags] request.
        canned-schedules-companion review post --forge github|gitlab --repo P --merge-request N [flags] dir
        canned-schedules-companion promote prepare [flags] issue.md
        canned-schedules-companion promote open --forge github|gitlab --repo P --issue N --base-branch B [flags] dir
+       canned-schedules-companion publish fetch --forge github|gitlab --repo P --commit SHA [flags]
        canned-schedules-companion publish prepare --merge-request-file merge-request.json [flags] file...
        canned-schedules-companion --version
 `
@@ -78,6 +80,7 @@ var commands = map[string]func(args []string, stdout, stderr io.Writer) int{
 	"review post":      reviewPost,
 	"promote prepare":  promotePrepare,
 	"promote open":     promoteOpen,
+	"publish fetch":    publishFetch,
 	"publish prepare":  publishPrepare,
 }
 

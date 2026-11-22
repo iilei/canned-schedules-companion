@@ -14,12 +14,12 @@ GitHub Action that runs both.
   any forge; GitHub and GitLab get small wrappers that install the binary and run it.
 - **Commands are `<step> <verb>`.** The verb says whether it writes to a forge:
 
-  | Step          | Local (files only) | Forge (writes)            |
-  | ------------- | ------------------ | ------------------------- |
-  | issue preview | `preview render`   | `preview post`            |
-  | promotion     | `promote prepare`  | `promote open`            |
-  | publishing    | `publish prepare`  | `publish fetch` (planned) |
-  | housekeeping  | `housekeep check`  | `housekeep retire`        |
+  | Step          | Local (files only) | Forge                       |
+  | ------------- | ------------------ | --------------------------- |
+  | issue preview | `preview render`   | `preview post`              |
+  | promotion     | `promote prepare`  | `promote open`              |
+  | publishing    | `publish prepare`  | `publish fetch` (read-only) |
+  | housekeeping  | `housekeep check`  | `housekeep retire`          |
 
   `preview render` and `preview post` exist so far. Forge verbs support `--dry-run` and take the forge explicitly
   (`--forge github` or `--forge gitlab`).
@@ -341,14 +341,42 @@ Inputs: `stage` (`deploy`), `version`, `image`, `approved-label`, `catalog-dir`,
 pipeline's checkout of the default branch), `base-branch` (`$CI_DEFAULT_BRANCH`), `branch-prefix`, `api-url` and
 `dry-run`.
 
+## publish fetch
+
+```sh
+canned-schedules-companion publish fetch --forge github|gitlab --repo P --commit SHA [flags]
+```
+
+**Finds the merge request a pushed commit came from** (a pull request on GitHub) and writes it, with the digests its
+review vouched for, as `merge-request.json` for [`publish prepare`](#publish-prepare). It only reads from the forge,
+so it has no `--dry-run`.
+
+- **The forge's records, not git's:** it asks which merged merge request has the commit as its result (GitLab `GET
+  repository/commits/:sha/merge_requests`, GitHub `GET commits/:sha/pulls`), which works after squash and rebase
+  merges. The times, the author and who merged come from there, in UTC.
+- **The review is the comment the review step keeps,** found by its marker and author as `review post` finds it. A
+  merge request without one, or with one an older release wrote (no digest block), gets `"review": null`, and every
+  schedule is published as not reviewed.
+- **A commit no merged merge request produced** (a direct push) exits 1 and writes nothing. Protect the default branch.
+
+| Flag          | Meaning                                                                    |
+| ------------- | -------------------------------------------------------------------------- |
+| `--commit`    | the pushed commit (`$CI_COMMIT_SHA`, `${{ github.sha }}`); required        |
+| `--out-file`  | where it goes (default `merge-request.json`)                               |
+| `--author`    | only this login's review comment counts (default as for `review post`)     |
+| `--token-env` | the variable with the token (default `GITHUB_TOKEN` or `GITLAB_TOKEN`)     |
+| `--api-url`   | the REST API (default github.com's or gitlab.com's)                        |
+
+Exit codes: 0 written, 1 no merged merge request for the commit, 2 unusable input or a forge error.
+
 ## publish prepare
 
 ```sh
 canned-schedules-companion publish prepare --merge-request-file merge-request.json [flags] file...
 ```
 
-**Lays out what a merged merge request publishes** (step 3; the forge part, `publish fetch`, and the wrappers come
-next). It is local: it reads the merged schedule files and `merge-request.json`, and writes into `--out-dir`, which
+**Lays out what a merged merge request publishes** (step 3, after [`publish fetch`](#publish-fetch); the note on the
+merge request and the wrappers come next). It is local: it reads the merged schedule files and `merge-request.json`, and writes into `--out-dir`, which
 must be empty or missing, so nothing stale is published.
 
 - **Always rendered from the file as merged,** with the flags given (the args file of the commit being published).
@@ -422,7 +450,7 @@ jq -r '.schedules[] | .artifactory as $p | .files[] | [.path, .digest, $p] | @ts
 
 plus the evaluation flags of `review render`. Exit codes: 0 laid out, 1 a schedule doesn't render, 2 unusable input.
 
-`merge-request.json`, for a local run written by hand (unknown keys are errors):
+`merge-request.json`, as `publish fetch` writes it or by hand for a local run (unknown keys are errors):
 
 ```json
 {
