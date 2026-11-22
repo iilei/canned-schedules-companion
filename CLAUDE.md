@@ -156,6 +156,19 @@ talks to a forge lives here.
 - **Single braces with `{{`/`}}` escapes (decided 2026-11-22):** the user kept `{…}` (as `site.json`) over `{{…}}`,
   which suggests Go templates or Helm and reads as a nested map in unquoted YAML; `{{` and `}}` are a literal brace,
   read left to right (`{{{name}` is `{` plus the name), so paths and metadata can hold braces.
+- **The publish wrappers (implemented 2026-11-22):** `templates/publish.yml` and `publish/action.yml` run on a push to
+  the default branch that changes catalog files: `publish fetch` (exit 1, a direct push, fails the job), `publish
+  prepare` with the pushed commit's args file and `git diff before..after` (`CI_COMMIT_BEFORE_SHA`,
+  `github.event.before`; an all-zero or missing before fails), the post-fetch script with the output directory, then
+  `publish post`. `dry-run` skips the script (it writes elsewhere) and posts no note. GitLab: one publish at a time
+  (`resource_group`), the output as artifacts. GitHub: script secrets through the `env` of the `uses:` step. Both are
+  in `action:version`. **End to end on the local GitLab (2026-11-22):** project `root/canned-schedules-publish-test`
+  (id 44), the components included with `local:` and a dev image (`canned-schedules-companion:dev`, pull policy
+  if-not-present), the README's Artifactory loop as the script, Artifactory joined to `demo-network` for the run:
+  reviewed MR !1 → `reviewed=true`, no note, properties and checksum read back (`{{literal}}` as `{literal}`); !2
+  changed after its review with `-o ci.skip` → `reviewed=false`, `changed`, the note with both digests, a title with
+  `;`, `:` and `ü` intact; a direct push → failed, nothing published. GitLab's `$[[ inputs ]]` carried the default
+  path template's quotes and braces unchanged. The GitHub action is untested until a release (it installs one).
 - **`publish post` (implemented 2026-11-22):** `publish.NoteFor(manifest)` writes the note (marker
   `<!-- canned-schedules:publish-note -->`, a table of path, reason, published and reviewed digest; paths and the
   merge commit echoed only when plain, digests only when well-formed), empty when every schedule was reviewed: then
@@ -292,9 +305,9 @@ talks to a forge lives here.
 ## Open
 
 1. **Step 3, publishing** (designed 2026-11-21 and 2026-11-22 in the core's CLAUDE.md, "Step 3, publishing";
-   `publish fetch`, `publish prepare`, `publish post` and the review's digests built, see Decisions): next the Action and the GitLab component (path and metadata templates, `force-overwrite`, the
-   post-fetch script, which runs once over the output: S3, Artifactory, a commit elsewhere), tested end to end on the
-   local GitLab against the local Artifactory.
+   the commands and both wrappers built, the GitLab component tested end to end on the local GitLab against the local
+   Artifactory, see Decisions): next a release, then the GitHub action against the demo repo with an S3 or Artifactory
+   script, and the core's docs (`docs/self-hosted-catalog.md`) on publishing.
 2. **GitLab catalog, only if teams ask:** a project on gitlab.com for catalog search and the short `component:` syntax.
 3. **The screen recording** with the public demo repo
    [`canned-schedules-demo`](https://github.com/iilei/canned-schedules-demo), a copy of the core's `examples/consumer`.

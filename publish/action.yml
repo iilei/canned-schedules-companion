@@ -1,0 +1,180 @@
+name: Canned schedule publish
+description: Publishes the schedules a merged pull request changed, tied to its review by digest, and notes on the pull request what was published without review.
+branding:
+  icon: calendar
+  color: green
+
+# The caller runs it on push to the default branch (paths: the catalog's *.canned-schedule.md files), checks out with
+# fetch-depth 0, and grants contents: read, pull-requests: read and issues: write (the note goes through the issues
+# API). It finds the pull request the pushed commit came from and the digests its review vouched for, renders every
+# changed schedule from the file as merged with the args file of that commit, lays out the files, provenance, metadata
+# and manifest, runs the post-fetch script with the output directory, and keeps a note on the pull request for every
+# schedule published without its reviewed digest. The post-fetch script's secrets go in the env of the step that uses
+# this action. Inputs reach the shell only through environment variables, never through ${{ }} inside a script.
+inputs:
+  version:
+    description: The canned-schedules-companion release to install. The default is the release this action belongs to.
+    default: "0.3.4"
+  catalog-dir:
+    description: The catalog's folder; only its *.canned-schedule.md files are published.
+    default: schedules
+  args-file:
+    description: The flags to render with, read from the commit being published, as canned-schedules.args. A missing file means none.
+    default: canned-schedules.args
+  path-template:
+    description: Each schedule's folder under the output directory; see the companion's README for the variables and helpers.
+    default: '{slug}/{mr}-{digest | afterLast ":" | truncate 12}'
+  metadata:
+    description: The metadata, one key=value template per line. Empty means the companion's default keys.
+    default: ""
+  force-overwrite:
+    description: true lets a later schedule overwrite a file an earlier one wrote, instead of failing.
+    default: "false"
+  post-fetch-script:
+    description: A script in the repository, run with bash and the output directory as its argument. Empty leaves the output in out-dir for later steps.
+    default: ""
+  note:
+    description: true keeps a note on the pull request for every schedule published without its reviewed digest.
+    default: "true"
+  token:
+    description: The token that reads the pull request and writes the note.
+    default: ${{ github.token }}
+  comment-author:
+    description: The login behind the token. Only its comments count as the review's and this step's own.
+    default: github-actions[bot]
+  dry-run:
+    description: true reads and lays out everything, but runs no post-fetch script and posts no note.
+    default: "false"
+
+outputs:
+  out-dir:
+    description: The directory with manifest.json and one folder per schedule.
+    value: ${{ steps.setup.outputs.out-dir }}
+
+runs:
+  using: composite
+  steps:
+    - id: setup
+      name: Check the inputs and prepare a working directory
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        FORCE: ${{ inputs.force-overwrite }}
+        NOTE: ${{ inputs.note }}
+        DRY_RUN: ${{ inputs.dry-run }}
+        EVENT: ${{ github.event_name }}
+      run: |
+        set -euo pipefail
+        fail() {
+          printf '::error::%s\n' "$1"
+          exit 2
+        }
+        [[ $EVENT == push ]] || fail "run it on push, not $EVENT"
+        [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || fail 'version: want a release such as 1.2.3'
+        for v in "force-overwrite=$FORCE" "note=$NOTE" "dry-run=$DRY_RUN"; do
+          [[ ${v#*=} == true || ${v#*=} == false ]] || fail "${v%%=*}: want true or false"
+        done
+        git -C "$GITHUB_WORKSPACE" rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
+          fail 'check out the repository first (actions/checkout with fetch-depth: 0)'
+        work_dir=$(mktemp -d "$RUNNER_TEMP/canned-schedule-publish.XXXXXX")
+        {
+          printf 'work-dir=%s\n' "$work_dir"
+          printf 'out-dir=%s\n' "$work_dir/publish"
+        } >> "$GITHUB_OUTPUT"
+
+    # Verifies the release's build provenance attestation on install.
+    - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+      with:
+        version: 2026.10.19 # mise itself; pinned, see CLAUDE.md
+        install_args: github:iilei/canned-schedules-companion@${{ inputs.version }}
+        working_directory: ${{ steps.setup.outputs.work-dir }}
+        github_token: ${{ inputs.token }}
+        cache: false
+
+    - name: Fetch the pull request and lay out the publish
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        VERSION: ${{ inputs.version }}
+        CATALOG_DIR: ${{ inputs.catalog-dir }}
+        ARGS_FILE: ${{ inputs.args-file }}
+        PATH_TEMPLATE: ${{ inputs.path-template }}
+        METADATA: ${{ inputs.metadata }}
+        FORCE: ${{ inputs.force-overwrite }}
+        AUTHOR: ${{ inputs.comment-author }}
+        BEFORE: ${{ github.event.before }}
+        WORK_DIR: ${{ steps.setup.outputs.work-dir }}
+        OUT_DIR: ${{ steps.setup.outputs.out-dir }}
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+        fail() {
+          printf '::error::%s\n' "$1"
+          exit 2
+        }
+        [[ $BEFORE =~ [^0] ]] || fail 'the push has no commit before it (a new branch?): nothing to compare with'
+        git cat-file -e "$BEFORE^{commit}" 2>/dev/null ||
+          fail "the commit before the push ($BEFORE) is missing: check out with fetch-depth: 0"
+
+        # The binary's path, looked up from the working directory, so mise never reads a mise.toml in the checkout.
+        bin=$(cd "$WORK_DIR" && mise exec "github:iilei/canned-schedules-companion@$VERSION" -- \
+          sh -c 'command -v canned-schedules-companion') || fail 'canned-schedules-companion is not installed'
+
+        # Exit 1: no merged pull request produced this commit (a direct push), so nothing is published.
+        rc=0
+        "$bin" publish fetch --forge github --repo "$GITHUB_REPOSITORY" --commit "$GITHUB_SHA" \
+          --api-url "$GITHUB_API_URL" --author "$AUTHOR" --out-file "$WORK_DIR/merge-request.json" || rc=$?
+        [[ $rc -ne 1 ]] || fail 'no merged pull request produced this commit: nothing is published'
+        [[ $rc -eq 0 ]] || exit "$rc"
+
+        # The flags of the commit being published, then the options, then the schedule files the push adds or changes.
+        args=()
+        if [[ -n $ARGS_FILE && -f $ARGS_FILE ]]; then
+          while IFS= read -r line || [[ -n $line ]]; do
+            line=${line%$'\r'}
+            case $line in '' | '#'*) continue ;; esac
+            args+=("$line")
+          done < "$ARGS_FILE"
+        fi
+        args+=(--merge-request-file "$WORK_DIR/merge-request.json" --path-template "$PATH_TEMPLATE" --out-dir "$OUT_DIR")
+        if [[ -n $METADATA ]]; then args+=(--metadata "$METADATA"); fi
+        if [[ $FORCE == true ]]; then args+=(--force-overwrite); fi
+        while IFS= read -r f; do
+          [[ -n $f ]] && args+=("$f")
+        done < <(git diff --name-only --diff-filter=ACMR "$BEFORE" "$GITHUB_SHA" -- "$CATALOG_DIR/*.canned-schedule.md")
+
+        "$bin" publish prepare "${args[@]}"
+
+    - name: Run the post-fetch script
+      if: inputs.post-fetch-script != ''
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        SCRIPT: ${{ inputs.post-fetch-script }}
+        DRY_RUN: ${{ inputs.dry-run }}
+        OUT_DIR: ${{ steps.setup.outputs.out-dir }}
+      run: |
+        set -euo pipefail
+        if [[ $DRY_RUN == true ]]; then
+          printf 'dry run: the post-fetch script %s is not run\n' "$SCRIPT"
+          exit 0
+        fi
+        [[ -f $SCRIPT ]] || { printf '::error::the post-fetch script %s is not in the repository\n' "$SCRIPT"; exit 2; }
+        bash "$SCRIPT" "$OUT_DIR"
+
+    - name: Note what was published without review
+      if: inputs.note == 'true'
+      shell: bash
+      working-directory: ${{ steps.setup.outputs.work-dir }}
+      env:
+        VERSION: ${{ inputs.version }}
+        AUTHOR: ${{ inputs.comment-author }}
+        DRY_RUN: ${{ inputs.dry-run }}
+        OUT_DIR: ${{ steps.setup.outputs.out-dir }}
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+        flags=(--forge github --repo "$GITHUB_REPOSITORY" --api-url "$GITHUB_API_URL" --author "$AUTHOR")
+        if [[ $DRY_RUN == true ]]; then flags+=(--dry-run); fi
+        mise exec "github:iilei/canned-schedules-companion@$VERSION" -- canned-schedules-companion publish post \
+          "${flags[@]}" "$OUT_DIR"

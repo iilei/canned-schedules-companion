@@ -1,0 +1,191 @@
+# Publishes the schedules a merged merge request changed: on a push to the default branch it finds the merge request
+# the pushed commit came from and the digests its review vouched for (publish fetch), renders every changed schedule
+# from the file as merged with the args file of that commit and lays out the files, provenance, metadata and manifest
+# (publish prepare), runs the team's post-fetch script with the output directory (an upload to S3 or Artifactory, a
+# commit elsewhere), and keeps a note on the merge request for every schedule published without its reviewed digest
+# (publish post).
+#
+# The job needs the CI/CD variable CANNED_SCHEDULES_TOKEN (the review's: a project access token with the api scope;
+# read_api is enough with note false). The post-fetch script runs in the job's image with the job's variables, so the
+# upload's secrets are the team's CI/CD variables; it should exit non-zero when the upload fails. Protect the default
+# branch: a commit that no merged merge request produced fails the job, and nothing is published.
+spec:
+  description: Publishes the schedules a merged merge request changed, tied to its review by digest.
+  inputs:
+    stage:
+      description: The stage of the job.
+      default: deploy
+    version:
+      description: The canned-schedules-companion release to install.
+      default: "0.3.4"
+      regex: ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$
+    image:
+      description: The job's image; it also runs the post-fetch script, so it needs that script's tools. An image that already contains the binary, git, curl and gnupg skips the downloads.
+      default: alpine:3.22
+    catalog-dir:
+      description: The catalog's folder; only its *.canned-schedule.md files are published.
+      default: schedules
+    args-file:
+      description: The flags to render with, read from the commit being published, as canned-schedules.args. A missing file means none.
+      default: canned-schedules.args
+    path-template:
+      description: Each schedule's folder under the output directory; see the companion's README for the variables and helpers.
+      default: '{slug}/{mr}-{digest | afterLast ":" | truncate 12}'
+    metadata:
+      description: The metadata, one key=value template per line. Empty means the companion's default keys.
+      default: ""
+    force-overwrite:
+      description: Let a later schedule overwrite a file an earlier one wrote, instead of failing.
+      type: boolean
+      default: false
+    post-fetch-script:
+      description: A script in the repository, run with sh and the output directory as its argument. Empty publishes the output as the job's artifacts only.
+      default: ""
+    note:
+      description: Keep a note on the merge request for every schedule published without its reviewed digest.
+      type: boolean
+      default: true
+    api-url:
+      description: The REST API as a job reaches it.
+      default: $CI_API_V4_URL
+    dry-run:
+      description: Reads and lays out everything, but runs no post-fetch script and posts no note.
+      type: boolean
+      default: false
+---
+canned-schedule-publish:
+  stage: $[[ inputs.stage ]]
+  image: $[[ inputs.image ]]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        paths:
+          - $[[ inputs.catalog-dir ]]/*.canned-schedule.md
+  # One publish at a time, so an older push can't overwrite a newer one's files.
+  resource_group: canned-schedule-publish
+  variables:
+    # The diff needs the commit before the push.
+    GIT_DEPTH: "0"
+    CS_VERSION: $[[ inputs.version ]]
+    CS_CATALOG_DIR:
+      value: $[[ inputs.catalog-dir ]]
+      expand: false
+    CS_ARGS_FILE:
+      value: $[[ inputs.args-file ]]
+      expand: false
+    CS_PATH_TEMPLATE:
+      value: $[[ inputs.path-template ]]
+      expand: false
+    CS_METADATA:
+      value: $[[ inputs.metadata ]]
+      expand: false
+    CS_FORCE_OVERWRITE: $[[ inputs.force-overwrite ]]
+    CS_POST_FETCH:
+      value: $[[ inputs.post-fetch-script ]]
+      expand: false
+    CS_NOTE: $[[ inputs.note ]]
+    CS_API_URL: $[[ inputs.api-url ]]
+    CS_DRY_RUN: $[[ inputs.dry-run ]]
+    # canned-schedules' release key, the only one that may sign the download.
+    CS_RELEASE_KEY: B645234C9CB8175ECA5D78A5C8447A2252E9E7B6
+  script:
+    - |
+      set -eu
+
+      fail() {
+        printf 'canned-schedule-publish: %s\n' "$1" >&2
+        exit 2
+      }
+
+      [ -n "${CANNED_SCHEDULES_TOKEN:-}" ] || fail 'set the CI/CD variable CANNED_SCHEDULES_TOKEN'
+
+      if ! command -v git >/dev/null || ! command -v curl >/dev/null; then
+        apk add --no-cache --quiet git curl
+      fi
+
+      if ! command -v canned-schedules-companion >/dev/null; then
+        command -v gpg >/dev/null || apk add --no-cache --quiet gnupg
+
+        case $(uname -m) in
+          x86_64) arch=x86_64 ;;
+          aarch64) arch=arm64 ;;
+          armv7l) arch=armv7 ;;
+          *) fail "no release for $(uname -m)" ;;
+        esac
+
+        archive=canned-schedules-companion_${CS_VERSION}_linux_${arch}.tar.gz
+        release=https://github.com/iilei/canned-schedules-companion/releases/download/v$CS_VERSION
+        bin_dir=$(mktemp -d)
+
+        for file in "$archive" checksums.txt checksums.txt.sig release-key.asc; do
+          curl --fail --silent --show-error --location --max-time 120 --output "$bin_dir/$file" "$release/$file"
+        done
+
+        GNUPGHOME=$(mktemp -d)
+        export GNUPGHOME
+        gpg --batch --quiet --import "$bin_dir/release-key.asc"
+        gpg --batch --status-fd 1 --verify "$bin_dir/checksums.txt.sig" "$bin_dir/checksums.txt" 2>/dev/null |
+          grep -q "^\[GNUPG:\] VALIDSIG .* $CS_RELEASE_KEY\$" || fail 'the release signature is not valid'
+        (cd "$bin_dir" && awk -v f="$archive" '$2 == f' checksums.txt | sha256sum -c -s -) ||
+          fail 'the download does not match checksums.txt'
+
+        tar -xzf "$bin_dir/$archive" -C "$bin_dir" canned-schedules-companion
+        PATH=$bin_dir:$PATH
+      fi
+
+      case $CI_COMMIT_BEFORE_SHA in
+        '' | *[!0]*) ;;
+        *) fail 'the push has no commit before it (a new branch?): nothing to compare with' ;;
+      esac
+      git cat-file -e "$CI_COMMIT_BEFORE_SHA^{commit}" 2>/dev/null ||
+        fail "the commit before the push ($CI_COMMIT_BEFORE_SHA) is missing (a force push?)"
+
+      out_dir=$CI_PROJECT_DIR/canned-schedule-publish
+      work=$(mktemp -d)
+
+      # The merged merge request and the digests its review vouched for. Exit 1: no merged merge request produced
+      # this commit (a direct push), so nothing is published.
+      rc=0
+      canned-schedules-companion publish fetch --forge gitlab --repo "$CI_PROJECT_ID" --commit "$CI_COMMIT_SHA" \
+        --api-url "$CS_API_URL" --token-env CANNED_SCHEDULES_TOKEN --out-file "$work/merge-request.json" || rc=$?
+      [ "$rc" -ne 1 ] || fail 'no merged merge request produced this commit: nothing is published'
+      [ "$rc" -eq 0 ] || exit "$rc"
+
+      # The flags of the commit being published, then the options, then the schedule files the push adds or changes.
+      set --
+      if [ -n "$CS_ARGS_FILE" ] && [ -f "$CS_ARGS_FILE" ]; then
+        while IFS= read -r line || [ -n "$line" ]; do
+          line=${line%"$(printf '\r')"}
+          case $line in '' | '#'*) continue ;; esac
+          set -- "$@" "$line"
+        done < "$CS_ARGS_FILE"
+      fi
+      set -- "$@" --merge-request-file "$work/merge-request.json" --path-template "$CS_PATH_TEMPLATE" --out-dir "$out_dir"
+      if [ -n "$CS_METADATA" ]; then set -- "$@" --metadata "$CS_METADATA"; fi
+      if [ "$CS_FORCE_OVERWRITE" = true ]; then set -- "$@" --force-overwrite; fi
+      git diff --name-only --diff-filter=ACMR "$CI_COMMIT_BEFORE_SHA" "$CI_COMMIT_SHA" -- \
+        "$CS_CATALOG_DIR/*.canned-schedule.md" > "$work/files"
+      while IFS= read -r f; do
+        [ -n "$f" ] && set -- "$@" "$f"
+      done < "$work/files"
+
+      canned-schedules-companion publish prepare "$@"
+
+      if [ -n "$CS_POST_FETCH" ]; then
+        if [ "$CS_DRY_RUN" = true ]; then
+          printf 'dry run: the post-fetch script %s is not run\n' "$CS_POST_FETCH"
+        else
+          [ -f "$CS_POST_FETCH" ] || fail "the post-fetch script $CS_POST_FETCH is not in the repository"
+          sh "$CS_POST_FETCH" "$out_dir"
+        fi
+      fi
+
+      if [ "$CS_NOTE" = true ]; then
+        set -- --forge gitlab --repo "$CI_PROJECT_ID" --api-url "$CS_API_URL" --token-env CANNED_SCHEDULES_TOKEN
+        if [ "$CS_DRY_RUN" = true ]; then set -- "$@" --dry-run; fi
+        canned-schedules-companion publish post "$@" "$out_dir"
+      fi
+  artifacts:
+    expire_in: 30 days
+    paths:
+      - canned-schedule-publish/
