@@ -162,6 +162,15 @@ talks to a forge lives here.
 - **Single braces with `{{`/`}}` escapes (decided 2026-11-22):** the user kept `{…}` (as `site.json`) over `{{…}}`,
   which suggests Go templates or Helm and reads as a nested map in unquoted YAML; `{{` and `}}` are a literal brace,
   read left to right (`{{{name}` is `{` plus the name), so paths and metadata can hold braces.
+- **Shipped upload scripts (2026-11-22, the user's request: a documented way to Artifactory):**
+  `publish/upload-artifactory.sh` and `publish/upload-s3.sh`, POSIX sh, copied by teams into their repository (they
+  run with the team's secrets, so they belong under its review), then named as `post-fetch-script`. Artifactory: all
+  three checksums from the manifest, the `artifactory` properties, a bearer token or user and password sent as a
+  header file (never in argv). S3: media type, the digest as `--checksum-sha256` (xxd, base64), the `s3` metadata
+  (left out with a warning when null). `*_LATEST=true` adds `<slug>/latest/` copies of JSON and provenance for
+  consumers, as the local catalog's script did. `internal/publish/scripts_test.go` runs both on a `Prepare` output
+  with recording stand-ins for curl and aws (skipped on Windows or without sh, jq, xxd, base64); both also ran
+  against the local Artifactory and an S3 emulator.
 - **Checksums next to the digest (decided 2026-11-22, the user's choice over computing them in scripts):** every
   file in the manifest and the provenance carries `checksums: {sha1, md5}` (hex), because Artifactory flags an
   upload without `X-Checksum-Sha1` and `X-Checksum-Md5` ("Client did not publish a checksum value") and checks all
