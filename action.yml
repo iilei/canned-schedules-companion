@@ -101,7 +101,7 @@ runs:
         } >> "$GITHUB_OUTPUT"
 
     # Verifies the release's build provenance attestation on install.
-    - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+    - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
       with:
         version: 2026.10.19 # mise itself; pinned, see CLAUDE.md
         install_args: github:iilei/canned-schedules-companion@${{ inputs.version }}
