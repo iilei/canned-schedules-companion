@@ -31,6 +31,9 @@ jobs:
       # fmt:check, vet, lint, lint:md, test (race detector) and build.
       - run: mise run check
 
+      # The documentation site, with Sphinx's warnings as errors, so a broken link or reference fails the pull request.
+      - run: mise run docs:build
+
   # Builds and tests on the three common systems: the binary runs locally too, not only on CI runners.
   test:
     name: test (${{ matrix.os }})

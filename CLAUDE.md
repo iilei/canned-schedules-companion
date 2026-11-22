@@ -327,6 +327,19 @@ talks to a forge lives here.
   `jdx/mise-action` step, runner labels pinned to explicit images (`ubuntu-26.04`, `macos-26`, `windows-2025`),
   versions at least two weeks old, the strict `.golangci.yml`, conventional commits.
 
+## Documentation site (decided and built 2026-11-22)
+
+- **Like the core's (the user's choices):** Sphinx with Furo and MyST, sources in `docs/`, built by `mise run
+  docs:build` (`docs/build.sh`) into `dist/docs` with `-W`; `docs/requirements.txt` is the core's file (hash-pinned,
+  two-week rule), the virtualenv cached under `~/.cache/canned-schedules-companion/docs-venv`; `python = "3.14"` in
+  `mise.toml`. No Sphinx kit: these docs show no schedules. `check.yml` builds it; `pages.yml` publishes it to
+  <https://iilei.github.io/canned-schedules-companion/> (Pages source "GitHub Actions", a one-time repo setting).
+- **The README** keeps the pitch, the steps with their commands and a map of the docs; the sections moved verbatim to
+  pages (one per step, `gitlab.md`, `github.md`, `publishing.md`, `json.md`, `png.md`, `development.md`), headings up
+  one level where a page holds one section, anchors rewritten to the page that holds them, repo paths as GitHub URLs.
+  Links into the core's README anchors point at the core's docs pages. The stale introduction ("step 1 only", a
+  commands table without review and playground) was corrected on the way.
+
 ## Open
 
 1. **Step 3, publishing** (designed 2026-11-21 and 2026-11-22 in the core's CLAUDE.md, "Step 3, publishing";
