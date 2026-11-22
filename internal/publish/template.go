@@ -50,40 +50,58 @@ type helper struct {
 	n    int
 }
 
-// Parse reads a template. Unknown variables and helpers are errors, so a typo can't turn into an empty value.
+// Parse reads a template. Unknown variables and helpers are errors, so a typo can't turn into an empty value. {{ and
+// }} stand for a literal { and }, so {{slug}} is the text {slug}.
 func Parse(text string) (*Template, error) {
 	t := &Template{}
-	rest := text
 
-	for rest != "" {
-		open := strings.IndexAny(rest, "{}")
-		if open < 0 {
-			t.parts = append(t.parts, part{literal: rest})
+	var lit strings.Builder
+
+	flush := func() {
+		if lit.Len() > 0 {
+			t.parts = append(t.parts, part{literal: lit.String()})
+			lit.Reset()
+		}
+	}
+
+	for rest := text; rest != ""; {
+		i := strings.IndexAny(rest, "{}")
+		if i < 0 {
+			lit.WriteString(rest)
 
 			break
 		}
 
-		if rest[open] == '}' {
-			return nil, fmt.Errorf("%w %q: a } without a { before it", errTemplate, text)
+		lit.WriteString(rest[:i])
+		c, rest2 := rest[i], rest[i+1:]
+
+		if strings.HasPrefix(rest2, string(c)) { // {{ or }}: the brace itself.
+			lit.WriteByte(c)
+			rest = rest2[1:]
+
+			continue
 		}
 
-		if open > 0 {
-			t.parts = append(t.parts, part{literal: rest[:open]})
+		if c == '}' {
+			return nil, fmt.Errorf("%w %q: a } without a { before it (write }} for a literal })", errTemplate, text)
 		}
 
-		end := strings.IndexAny(rest[open+1:], "{}")
-		if end < 0 || rest[open+1+end] == '{' {
-			return nil, fmt.Errorf("%w %q: a { without a } after it", errTemplate, text)
+		end := strings.IndexAny(rest2, "{}")
+		if end < 0 || rest2[end] == '{' {
+			return nil, fmt.Errorf("%w %q: a { without a } after it (write {{ for a literal {)", errTemplate, text)
 		}
 
-		p, err := placeholder(rest[open+1 : open+1+end])
+		p, err := placeholder(rest2[:end])
 		if err != nil {
 			return nil, fmt.Errorf("%w %q: %w", errTemplate, text, err)
 		}
 
+		flush()
 		t.parts = append(t.parts, p)
-		rest = rest[open+1+end+1:]
+		rest = rest2[end+1:]
 	}
+
+	flush()
 
 	return t, nil
 }

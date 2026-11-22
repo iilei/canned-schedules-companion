@@ -153,6 +153,9 @@ talks to a forge lives here.
 - **`afterLast "sep"` (added 2026-11-22, the user's choice over a replace helper):** the text after the last
   separator, the whole value without one (`${v##*sep}`); one double-quoted separator without spaces, quotes, braces or
   pipes. Found when a Windows runner couldn't create `42-sha256:…`.
+- **Single braces with `{{`/`}}` escapes (decided 2026-11-22):** the user kept `{…}` (as `site.json`) over `{{…}}`,
+  which suggests Go templates or Helm and reads as a nested map in unquoted YAML; `{{` and `}}` are a literal brace,
+  read left to right (`{{{name}` is `{` plus the name), so paths and metadata can hold braces.
 - **`publish prepare` (implemented 2026-11-22, step 3's local part, `internal/publish`):**
   - **Always rendered from the file as merged (decided 2026-11-22, revising "use the reviewed files"):** review outputs
     come from the merge request's own pipeline, which the merge request can change, so reusing them could publish

@@ -420,7 +420,8 @@ Helpers chain with `|`: `toLower`, `toUpper`, `reverseByDotDelim` (`gitlab.examp
 `truncate N` (the first N characters: `{digest | truncate 19}` is `sha256:` and 12 hex) and `afterLast "sep"` (what
 follows the last separator, the whole value without one: `{digest | afterLast ":" | truncate 12}` is 12 hex). Windows
 can't create files or folders with a `:` in their name, so keep the digest's prefix out of the path there. Anything
-else is the post-fetch script's job. An unknown variable or helper is an error, and a filled path must stay inside the output
+else is the post-fetch script's job. `{{` and `}}` stand for a literal `{` and `}` (`{{slug}}` is the text
+`{slug}`). An unknown variable or helper is an error, and a filled path must stay inside the output
 directory (relative, no empty, `.` or `..` folders); otherwise the layout is yours. Two schedules writing the same
 file fail the run unless `--force-overwrite`.
 
