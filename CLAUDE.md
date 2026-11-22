@@ -141,6 +141,15 @@ talks to a forge lives here.
     `templates/promote.yml` runs on the issue preview's webhook pipeline and acts only when the event's
     `changes.labels` added the label; it reads the issue's current text through the API, the args file from the
     checkout, and needs `CANNED_SCHEDULES_TOKEN` with the Developer role.
+- **`publish fetch` (implemented 2026-11-22, step 3's forge part, read-only):** `forge.Merged` from each client's
+  `MergedRequest(repo, sha)`: GitLab `repository/commits/:sha/merge_requests`, matching a merged one whose
+  `merge_commit_sha`, `squash_commit_sha` or head `sha` (fast-forward) is the commit, `merge_user` before the
+  deprecated `merged_by`, the project from `references.full`; GitHub `commits/:sha/pulls`, matching `merge_commit_sha`
+  (merge, squash and the last rebased commit), then `pulls/:n` for `merged_by`. Neither found is `forge.ErrNotMerged`,
+  exit 1. The review comment comes from a dry-run `UpsertNote` (the comment `review post` keeps), read with
+  `review.Digests`; none or no block is `"review": null`. The written file goes through `publish.ParseInput` first.
+  `newMergeRequestClient` is shared with `review post`. Checked against the local GitLab 19.4.1 (demo !2, a merge
+  commit; its v0.3.1 review reads as no digests).
 - **`publish prepare` (implemented 2026-11-22, step 3's local part, `internal/publish`):**
   - **Always rendered from the file as merged (decided 2026-11-22, revising "use the reviewed files"):** review outputs
     come from the merge request's own pipeline, which the merge request can change, so reusing them could publish
@@ -271,9 +280,7 @@ talks to a forge lives here.
 ## Open
 
 1. **Step 3, publishing** (designed 2026-11-21 and 2026-11-22 in the core's CLAUDE.md, "Step 3, publishing";
-   `publish prepare` and the review's digests built, see Decisions): next `publish fetch --forge …` finds the merge request the pushed commit came from (works after squash and
-   rebase merges) and reads those digests from the newest review comment by the bot into `merge-request.json`; a
-   forge verb posts a note on the merged merge request for every schedule `publish prepare` published without the
+   `publish fetch`, `publish prepare` and the review's digests built, see Decisions): next a forge verb posts a note on the merged merge request for every schedule `publish prepare` published without the
    reviewed digest; then the Action and the GitLab component (path and metadata templates, `force-overwrite`, the
    post-fetch script, which runs once over the output: S3, Artifactory, a commit elsewhere), tested end to end on the
    local GitLab against the local Artifactory.

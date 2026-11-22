@@ -33,6 +33,12 @@ type reviewForge interface {
 	SetMergeRequestTitle(ctx context.Context, repo string, number int, title string) error
 }
 
+// mergeRequestClient is what the merge request steps (review post, publish fetch) need from a forge.
+type mergeRequestClient interface {
+	reviewForge
+	fetchForge
+}
+
 type reviewFlags struct {
 	forge, repo, apiURL, author, tokenEnv, label, headSHA string
 	mergeRequest                                          int
@@ -192,17 +198,26 @@ func postReview(f *reviewFlags, dir string, stdout io.Writer) error {
 // client makes the forge's client. On GitLab an empty --author means the token's user, asked here; GitHub's default
 // is the workflow token's account (applyDefaults).
 func (f *reviewFlags) client(ctx context.Context, token string) (reviewForge, error) {
+	return newMergeRequestClient(ctx, f.forge, f.apiURL, token, &f.author)
+}
+
+// newMergeRequestClient makes the forge's client. On GitLab an empty *author becomes the token's user.
+func newMergeRequestClient(
+	ctx context.Context,
+	name, apiURL, token string,
+	author *string,
+) (mergeRequestClient, error) {
 	agent := "canned-schedules-companion/" + ownVersion()
 
-	if f.forge == forgeGitHub {
-		return &github.Client{HTTP: http.DefaultClient, BaseURL: f.apiURL, Token: token, UserAgent: agent}, nil
+	if name == forgeGitHub {
+		return &github.Client{HTTP: http.DefaultClient, BaseURL: apiURL, Token: token, UserAgent: agent}, nil
 	}
 
-	c := &gitlab.Client{HTTP: http.DefaultClient, BaseURL: f.apiURL, Token: token, UserAgent: agent}
+	c := &gitlab.Client{HTTP: http.DefaultClient, BaseURL: apiURL, Token: token, UserAgent: agent}
 
-	if f.author == "" {
+	if *author == "" {
 		var err error
-		if f.author, err = c.CurrentUser(ctx); err != nil {
+		if *author, err = c.CurrentUser(ctx); err != nil {
 			return nil, err
 		}
 	}
