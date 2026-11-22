@@ -12,7 +12,7 @@ branding:
 inputs:
   version:
     description: The canned-schedules-companion release to install. The default is the release this action belongs to.
-    default: "0.3.6"
+    default: "0.3.7"
   site-version:
     description: The canned-schedules release whose page to publish. Empty means the one the companion is built with, so the playground checks as the review does.
     default: ""
