@@ -31,6 +31,10 @@ const DigestsMarker = "<!-- canned-schedules:digests"
 // comment, so it is reported without being echoed.
 const markerEnd = "-->"
 
+// weekMarker starts the placeholder line for a schedule's week, followed by the name of its SVG in Result.Weeks. The
+// forge part replaces it with the uploaded image where the forge shows one (GitLab); elsewhere it stays invisible.
+const weekMarker = "<!-- canned-schedules:week "
+
 var safePath = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
 
 // File is a changed schedule file: its path in the repository and its content at the merge request's head.
@@ -41,6 +45,9 @@ type File struct {
 
 // Result is the comment and what the forge step needs besides it.
 type Result struct {
+	// Weeks are the week previews of the valid files by file name (week-1.svg, …), each named in the comment by a
+	// placeholder line that ReplaceWeeks fills.
+	Weeks map[string][]byte
 	// Comment is the whole comment, starting with the stamped marker.
 	Comment []byte
 	// Names are the schedules' names (H1s) of the valid files, in the order of the files.
@@ -50,24 +57,26 @@ type Result struct {
 }
 
 type checked struct {
-	path, report, text, problem, digest string
-	ok                                  bool
+	path, report, text, problem, digest, week string
+	ok                                        bool
 }
 
 // Render checks files with opts (which must plan a preview, for the week in the comment). A file's name must be
 // cs.FileName of its H1, so the catalog stays named after its schedules. tool goes into the stamp. The error is only
 // for unusable options or a rendering bug; problems in the files are in the comment.
 func Render(files []File, opts *cs.Options, fiddle *url.URL, tool string) (*Result, error) {
-	res := &Result{Valid: true}
+	res := &Result{Valid: true, Weeks: map[string][]byte{}}
 	results := make([]checked, 0, len(files))
 
 	for _, f := range files {
-		c, name, err := check(f, opts)
+		c, name, svg, err := check(f, opts)
 		if err != nil {
 			return nil, err
 		}
 
 		if c.ok {
+			c.week = fmt.Sprintf("week-%d.svg", len(res.Weeks)+1)
+			res.Weeks[c.week] = svg
 			res.Names = append(res.Names, name)
 		} else {
 			res.Valid = false
@@ -82,47 +91,52 @@ func Render(files []File, opts *cs.Options, fiddle *url.URL, tool string) (*Resu
 	return res, nil
 }
 
-func check(f File, opts *cs.Options) (checked, string, error) {
+func check(f File, opts *cs.Options) (checked, string, []byte, error) {
 	c := checked{path: f.Path}
 
 	if !safePath.MatchString(f.Path) {
 		c.problem = "A changed file has characters in its path that a catalog file can't have (letters, digits, " +
 			"`.`, `_`, `-` and `/` only), so it isn't checked."
 
-		return c, "", nil
+		return c, "", nil, nil
 	}
 
 	r, err := cs.Evaluate(f.Src, opts)
 	if err != nil {
-		return c, "", err
+		return c, "", nil, err
 	}
 
 	md, err := r.Report(f.Path).Markdown()
 	if err != nil {
-		return c, "", err
+		return c, "", nil, err
 	}
 
 	c.report = string(md)
 
 	if !r.Valid() {
-		return c, "", nil
+		return c, "", nil, nil
 	}
 
 	if want := cs.FileName(r.Output.Name); path.Base(f.Path) != want {
 		c.problem = fmt.Sprintf("The file should be named `%s`: catalog files are named after the schedule's "+
 			"title, so the playground and the catalog find it under that name.", want)
 
-		return c, "", nil
+		return c, "", nil, nil
 	}
 
 	text, err := r.Text(false)
 	if err != nil {
-		return c, "", err
+		return c, "", nil, err
+	}
+
+	svg, err := r.SVG(cs.SVGOptions{Theme: cs.ThemeAuto})
+	if err != nil {
+		return c, "", nil, err
 	}
 
 	c.text, c.ok, c.digest = string(text), true, publish.Digest(f.Src)
 
-	return c, r.Output.Name, nil
+	return c, r.Output.Name, svg, nil
 }
 
 // digest hashes the paths and contents, so a review of the same files at the same state can be left alone.
@@ -204,6 +218,10 @@ func section(c *checked) string {
 		open = " open"
 	}
 
+	if c.week != "" {
+		b.WriteString(weekMarker + c.week + " " + markerEnd + "\n\n")
+	}
+
 	fmt.Fprintf(&b, "<details%s><summary>%s: %s</summary>\n\n", open, mark, title)
 
 	if c.digest != "" {
@@ -258,6 +276,32 @@ func Digests(comment string) (map[string]string, bool) {
 	}
 
 	return nil, false
+}
+
+// ReplaceWeeks fills each week placeholder in a comment with the image URL that image returns for its file name (an
+// empty URL leaves the placeholder). The image's alternative text names the file's path.
+func ReplaceWeeks(comment string, image func(name string) (string, error)) (string, error) {
+	lines := strings.SplitAfter(comment, "\n")
+
+	for i, line := range lines {
+		rest, ok := strings.CutPrefix(line, weekMarker)
+		if !ok {
+			continue
+		}
+
+		name, _, _ := strings.Cut(rest, " ")
+
+		u, err := image(name)
+		if err != nil {
+			return "", err
+		}
+
+		if u != "" {
+			lines[i] = "![Week as SVG](" + strings.NewReplacer("(", "%28", ")", "%29").Replace(u) + ")\n"
+		}
+	}
+
+	return strings.Join(lines, ""), nil
 }
 
 // Title is the title a merge request gets from its schedules: the name of a single one, or the names joined.

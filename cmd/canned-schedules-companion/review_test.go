@@ -19,6 +19,7 @@ type fakeMR struct {
 	labels     []string
 	notes      []string
 	writes     []string
+	uploads    []string
 	mu         sync.Mutex
 }
 
@@ -65,6 +66,16 @@ func (f *fakeMR) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		_, _ = w.Write([]byte("{}"))
+	case path == "/projects/group%2Fcatalog/uploads" && r.Method == http.MethodPost:
+		_, h, err := r.FormFile("file")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+
+			return
+		}
+
+		f.uploads = append(f.uploads, h.Filename)
+		_, _ = w.Write([]byte(`{"url": "/uploads/0123/` + h.Filename + `"}`))
 	case path == mr+"/notes" && r.Method == http.MethodGet:
 		list := make([]map[string]any, 0, len(f.notes))
 		for _, n := range f.notes {
@@ -142,14 +153,24 @@ func TestReview(t *testing.T) {
 	if o := postReviewTo(
 		t,
 		append(post, "--dry-run", out)...); len(f.writes) != 0 ||
-		!strings.Contains(o, "would create") {
-		t.Errorf("dry run: %q, writes %q", o, f.writes)
+		!strings.Contains(
+			o,
+			"would create",
+		) || !strings.Contains(o, "would upload schedule-1-") || len(f.uploads) != 0 {
+		t.Errorf("dry run: %q, writes %q, uploads %q", o, f.writes, f.uploads)
 	}
 
 	postReviewTo(t, append(post, out)...)
 
 	if !slices.Equal(f.writes, []string{"create", "label +Schedule", "title Schedule: Night Shift"}) {
 		t.Fatalf("writes %q", f.writes)
+	}
+
+	// The week shows inline, above its schedule's section; the placeholder is gone.
+	if len(f.uploads) != 1 ||
+		!strings.Contains(f.notes[0], "![Week as SVG](/uploads/0123/"+f.uploads[0]+")\n\n<details>") ||
+		strings.Contains(f.notes[0], "canned-schedules:week") {
+		t.Errorf("uploads %q, note:\n%s", f.uploads, f.notes[0])
 	}
 
 	if o := postReviewTo(t, append(post, out)...); !strings.Contains(o, "up to date") || len(f.writes) != 3 {

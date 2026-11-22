@@ -79,6 +79,12 @@ talks to a forge lives here.
     `[A-Za-z0-9._/-]` are reported without being echoed (user data in Markdown). `review.json` carries `valid` and the
     names for the forge part. The marker is `<!-- canned-schedules:merge-request-review` with the issue preview's
     stamp (`preview.Stamp.LineFor`); the body digest covers paths and contents.
+  - **The week inline on GitLab (implemented 2026-11-22, the user expected the SVG in a schedule's merge request):**
+    `review render` writes each valid file's week as `week-N.svg` (theme auto, as the issue preview's) and puts a
+    placeholder line `<!-- canned-schedules:week week-N.svg -->` above its section; `review post` replaces it with
+    `![Week as SVG](<upload>)` when the client can upload (GitLab's uploads API, named `preview.UploadName`), and
+    leaves it, invisible, on GitHub. Names other than `week-<n>.svg` are refused (no paths). Uploads happen only when
+    the note changes (same stamp: nothing written). Checked on the local GitLab (publish-test !1).
   - **The review's digests (implemented 2026-11-22):** the comment's second line opens a hidden block,
     `<!-- canned-schedules:digests`, one `<path> <digest>` line per file that passed (`publish.Digest` of the raw
     bytes), then `-->`; each valid section shows the digest as a `Digest:` line. Files with problems get none: the review

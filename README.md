@@ -192,7 +192,9 @@ canned-schedules-companion review post --forge github|gitlab --repo OWNER/REPO -
 Reviews a merge request (a pull request on GitHub) that changes the catalog, for example one proposed from the
 [self-hosted playground](#playground-build). `review render` checks each changed schedule file with the core and
 the catalog's rule that **a file is named after its schedule** (`Night Shift` → `night-shift.canned-schedule.md`), and
-writes one comment: an overview, then each file's report and week. Paths with characters a catalog file can't have are
+writes one comment: an overview, then each file's report and week. Each valid schedule's week is also written as
+`week-N.svg`, and **on GitLab `review post` uploads it and shows it inline** above that schedule's section, as the
+issue preview does; on GitHub, which strips inline SVG and has no upload API for bots, the text form stands alone. Paths with characters a catalog file can't have are
 reported without being echoed. Exit codes: 0 all valid, 1 problems, 2 unusable input.
 
 **The comment records what it vouches for:** every file that passed is listed with its digest (`sha256:<64 hex>` of the
