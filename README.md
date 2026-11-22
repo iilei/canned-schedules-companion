@@ -443,6 +443,17 @@ jq -r '.schedules[] | .artifactory as $p | .files[] | [.path, .digest, $p] | @ts
   done
 ```
 
+```sh
+# Upload one publish to S3: every file with its media type, its digest as the checksum and the schedule's metadata.
+jq -r '.schedules[] | (.s3 // {} | tojson | @base64) as $m | .files[] | [.path, .digest, .["media-type"], $m] | @tsv' \
+  manifest.json |
+  while IFS="$(printf '\t')" read -r path digest type meta; do
+    aws s3api put-object --bucket "$BUCKET" --key "$path" --body "$path" --content-type "$type" \
+      --metadata "$(printf '%s' "$meta" | base64 -d)" \
+      --checksum-sha256 "$(printf '%s' "${digest#sha256:}" | xxd -r -p | base64)"
+  done
+```
+
 | Flag                   | Meaning                                                                     | Default                                                                                |
 | ---------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | `--merge-request-file` | the merge request and its review, as `publish fetch` writes them (required) |                                                                                        |
