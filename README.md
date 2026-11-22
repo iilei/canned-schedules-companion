@@ -436,28 +436,6 @@ person typed (names, titles) need no escaping in the script:
 - `s3`: a map for `aws s3 cp --metadata "$(jq -c .s3 …)"` or `x-amz-meta-*` headers, with values outside printable
   ASCII RFC 2047 encoded as S3 returns them; `null` (and a warning) when it exceeds S3's 2 KB.
 
-```sh
-# Upload one publish to Artifactory: every file with its checksums and the schedule's properties. Artifactory flags
-# a file whose client sent no SHA-1 and MD5, so the manifest has them next to the digest.
-jq -r '.schedules[] | .artifactory as $p | .files[]
-    | [.path, .digest, .checksums.sha1, .checksums.md5, $p] | @tsv' manifest.json |
-  while IFS="$(printf '\t')" read -r path digest sha1 md5 props; do
-    curl -fsS -u "$ARTIFACTORY_USER:$ARTIFACTORY_TOKEN" -H "X-Checksum-Sha256: ${digest#sha256:}" \
-      -H "X-Checksum-Sha1: $sha1" -H "X-Checksum-Md5: $md5" -T "$path" "$ARTIFACTORY_URL/catalog-local/$path$props"
-  done
-```
-
-```sh
-# Upload one publish to S3: every file with its media type, its digest as the checksum and the schedule's metadata.
-jq -r '.schedules[] | (.s3 // {} | tojson | @base64) as $m | .files[] | [.path, .digest, .["media-type"], $m] | @tsv' \
-  manifest.json |
-  while IFS="$(printf '\t')" read -r path digest type meta; do
-    aws s3api put-object --bucket "$BUCKET" --key "$path" --body "$path" --content-type "$type" \
-      --metadata "$(printf '%s' "$meta" | base64 -d)" \
-      --checksum-sha256 "$(printf '%s' "${digest#sha256:}" | xxd -r -p | base64)"
-  done
-```
-
 | Flag                   | Meaning                                                                     | Default                                                                                |
 | ---------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | `--merge-request-file` | the merge request and its review, as `publish fetch` writes them (required) |                                                                                        |
@@ -509,8 +487,26 @@ protect the default branch. `dry-run` reads and lays out everything, but runs no
 
 The post-fetch script is a file in the repository, run with the output directory as its argument; it uploads, and
 should fail when the upload fails. Its secrets are the job's: CI/CD variables on GitLab, the `env` of the step that
-uses the action on GitHub. The upload loops under [`publish prepare`](#publish-prepare) work as such a script, with
-`cd "$1"` first.
+uses the action on GitHub.
+
+**Upload scripts.** Two maintained scripts upload `publish prepare`'s output as it is meant to be stored. Copy the one
+you need from the release you pin into your repository (it runs with your secrets, so it belongs under your own
+review), e.g. as `scripts/upload-schedules.sh`:
+
+- [`publish/upload-artifactory.sh`](publish/upload-artifactory.sh): every file to
+  `$ARTIFACTORY_URL/$ARTIFACTORY_REPO/[$ARTIFACTORY_PATH/]<path>`, with the schedule's metadata as properties and all
+  three checksums from the manifest, so Artifactory verifies each upload (and flags none for lacking SHA-1 and MD5).
+  Credentials: `ARTIFACTORY_TOKEN`, or `ARTIFACTORY_USER` and `ARTIFACTORY_PASSWORD`; they reach curl as a header
+  file, never on its command line.
+- [`publish/upload-s3.sh`](publish/upload-s3.sh): every file to `s3://$S3_BUCKET/[$S3_PREFIX/]<path>` with its media
+  type, the digest as the checksum S3 verifies, and the metadata as `x-amz-meta-*`; the AWS CLI's own configuration
+  for credentials, region and `AWS_ENDPOINT_URL`.
+- `ARTIFACTORY_LATEST=true` / `S3_LATEST=true` also write each schedule's JSON and provenance to `<slug>/latest/`, a
+  stable address for consumers such as a Terraform module; the folders named by the path template keep every publish.
+
+Both need `jq` (installed with `apk` in the components' Alpine image; `curl` too) and check that the manifest is
+version 1. They were run against Artifactory OSS 7.104 and an S3 emulator, and a test runs them with stand-ins for
+`curl` and `aws` on every change.
 
 **GitLab:** `templates/publish.yml` needs the review's `CANNED_SCHEDULES_TOKEN` and runs the script in its `image`,
 which needs the script's tools (`curl`, `jq`, the AWS CLI, …). One publish runs at a time (`resource_group`).
@@ -520,8 +516,10 @@ include:
   - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.7/templates/publish.yml
     integrity: sha256-5R6Py7GDsSz9QUtsh9htai2cu6zZ69WX6lBEITNW7r4=
     inputs:
-      post-fetch-script: scripts/upload-schedules.sh
+      post-fetch-script: scripts/upload-schedules.sh # a copy of publish/upload-artifactory.sh
 ```
+
+with the CI/CD variables `ARTIFACTORY_URL`, `ARTIFACTORY_REPO` and `ARTIFACTORY_TOKEN` (masked).
 
 **GitHub:** `publish/action.yml`, with `pull-requests: read` (which pull request a commit came from) and
 `issues: write` (the note):
@@ -556,9 +554,11 @@ jobs:
           persist-credentials: false
       - uses: iilei/canned-schedules-companion/publish@<commit SHA> # <release tag>
         env:
+          ARTIFACTORY_URL: https://acme.jfrog.io/artifactory
+          ARTIFACTORY_REPO: schedules-local
           ARTIFACTORY_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
         with:
-          post-fetch-script: scripts/upload-schedules.sh
+          post-fetch-script: scripts/upload-schedules.sh # a copy of publish/upload-artifactory.sh
 ```
 
 | Input               | Meaning                                                                                        | Default                                                |
