@@ -1,5 +1,5 @@
 // Command canned-schedules-companion runs the lifecycle steps around canned schedules: issue feedback, the review of
-// merge requests, the self-hosted playground and promotion of an approved issue to the catalog; later publishing and
+// merge requests, the self-hosted playground, promotion of an approved issue to the catalog and publishing; later
 // housekeeping.
 //
 // Usage:
@@ -11,6 +11,7 @@
 //	canned-schedules-companion playground build --site-zip zip --forge github|gitlab --project P --branch B [flags] dir
 //	canned-schedules-companion promote prepare [flags] issue.md
 //	canned-schedules-companion promote open --forge github|gitlab --repo P --issue N --base-branch B [flags] dir
+//	canned-schedules-companion publish prepare --merge-request-file merge-request.json [flags] file...
 //
 // Every step splits into local verbs (render, prepare, check), which read and write files only, and forge verbs
 // (post, open, publish, retire), which write to GitHub or GitLab, support --dry-run and take the forge explicitly.
@@ -62,6 +63,7 @@ const usage = `usage: canned-schedules-companion preview render [flags] request.
        canned-schedules-companion review post --forge github|gitlab --repo P --merge-request N [flags] dir
        canned-schedules-companion promote prepare [flags] issue.md
        canned-schedules-companion promote open --forge github|gitlab --repo P --issue N --base-branch B [flags] dir
+       canned-schedules-companion publish prepare --merge-request-file merge-request.json [flags] file...
        canned-schedules-companion --version
 `
 
@@ -76,6 +78,7 @@ var commands = map[string]func(args []string, stdout, stderr io.Writer) int{
 	"review post":      reviewPost,
 	"promote prepare":  promotePrepare,
 	"promote open":     promoteOpen,
+	"publish prepare":  publishPrepare,
 }
 
 // version is set by goreleaser (-ldflags -X main.version=…); without it the module version is used.
