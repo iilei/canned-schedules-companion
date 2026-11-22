@@ -162,6 +162,12 @@ talks to a forge lives here.
 - **Single braces with `{{`/`}}` escapes (decided 2026-11-22):** the user kept `{…}` (as `site.json`) over `{{…}}`,
   which suggests Go templates or Helm and reads as a nested map in unquoted YAML; `{{` and `}}` are a literal brace,
   read left to right (`{{{name}` is `{` plus the name), so paths and metadata can hold braces.
+- **Checksums next to the digest (decided 2026-11-22, the user's choice over computing them in scripts):** every
+  file in the manifest and the provenance carries `checksums: {sha1, md5}` (hex), because Artifactory flags an
+  upload without `X-Checksum-Sha1` and `X-Checksum-Md5` ("Client did not publish a checksum value") and checks all
+  three (a wrong one is a 409). They are not digests: nothing matches by them, and `digest` stays `sha256:<hex>`. A
+  compatible addition (manifest and provenance stay `"version": 1`). Scripts pass them on; `sha1sum`/`md5sum` differ
+  on macOS (`shasum`, `md5`), which the manifest makes moot.
 - **The publish wrappers (implemented 2026-11-22):** `templates/publish.yml` and `publish/action.yml` run on a push to
   the default branch that changes catalog files: `publish fetch` (exit 1, a direct push, fails the job), `publish
   prepare` with the pushed commit's args file and `git diff before..after` (`CI_COMMIT_BEFORE_SHA`,

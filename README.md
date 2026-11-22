@@ -401,12 +401,12 @@ must be empty or missing, so nothing stale is published.
 
   `manifest.json` always holds a list, `{"version": 1, "merge-request": {…}, "schedules": [ … ]}`: per schedule its
   name, slug, path, digest, `reviewed`, `reviewed-digest` and `reason`, its `dir`, its `files` (path, digest, media
-  type) and its metadata. One schedule is a list of one, a merge request without schedule changes an empty list, so a
+  type, and `checksums` with the SHA-1 and MD5 that Artifactory also wants from a client) and its metadata. One schedule is a list of one, a merge request without schedule changes an empty list, so a
   post-fetch script just loops.
 - **The provenance** comes from the forge's records, not from git: the merge request (number, URL, title, author,
   merged by, created and merged at in UTC, target branch, the merge commit for reference only), the review (whether
   the digests match, the reviewed digest, the reason, the review comment's URL), the companion and core versions with
-  the digest of the flags, and the digest of every other file in the folder.
+  the digest of the flags, and the digest (and checksums) of every other file in the folder.
 
 **Templates.** The path and the metadata use the same placeholders as `site.json`, and every variable works in both:
 
@@ -437,13 +437,13 @@ person typed (names, titles) need no escaping in the script:
   ASCII RFC 2047 encoded as S3 returns them; `null` (and a warning) when it exceeds S3's 2 KB.
 
 ```sh
-# Upload one publish to Artifactory: every file with its checksums (SHA-256 from the manifest; Artifactory also wants
-# SHA-1 and MD5 from the client, or flags the file) and the schedule's properties.
-jq -r '.schedules[] | .artifactory as $p | .files[] | [.path, .digest, $p] | @tsv' manifest.json |
-  while IFS="$(printf '\t')" read -r path digest props; do
+# Upload one publish to Artifactory: every file with its checksums and the schedule's properties. Artifactory flags
+# a file whose client sent no SHA-1 and MD5, so the manifest has them next to the digest.
+jq -r '.schedules[] | .artifactory as $p | .files[]
+    | [.path, .digest, .checksums.sha1, .checksums.md5, $p] | @tsv' manifest.json |
+  while IFS="$(printf '\t')" read -r path digest sha1 md5 props; do
     curl -fsS -u "$ARTIFACTORY_USER:$ARTIFACTORY_TOKEN" -H "X-Checksum-Sha256: ${digest#sha256:}" \
-      -H "X-Checksum-Sha1: $(sha1sum "$path" | cut -d' ' -f1)" -H "X-Checksum-Md5: $(md5sum "$path" | cut -d' ' -f1)" \
-      -T "$path" "$ARTIFACTORY_URL/catalog-local/$path$props"
+      -H "X-Checksum-Sha1: $sha1" -H "X-Checksum-Md5: $md5" -T "$path" "$ARTIFACTORY_URL/catalog-local/$path$props"
   done
 ```
 
