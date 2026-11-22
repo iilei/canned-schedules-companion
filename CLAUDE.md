@@ -150,6 +150,9 @@ talks to a forge lives here.
   `review.Digests`; none or no block is `"review": null`. The written file goes through `publish.ParseInput` first.
   `newMergeRequestClient` is shared with `review post`. Checked against the local GitLab 19.4.1 (demo !2, a merge
   commit; its v0.3.1 review reads as no digests).
+- **`afterLast "sep"` (added 2026-11-22, the user's choice over a replace helper):** the text after the last
+  separator, the whole value without one (`${v##*sep}`); one double-quoted separator without spaces, quotes, braces or
+  pipes. Found when a Windows runner couldn't create `42-sha256:…`.
 - **`publish prepare` (implemented 2026-11-22, step 3's local part, `internal/publish`):**
   - **Always rendered from the file as merged (decided 2026-11-22, revising "use the reviewed files"):** review outputs
     come from the merge request's own pipeline, which the merge request can change, so reusing them could publish
@@ -161,7 +164,8 @@ talks to a forge lives here.
     `url` and `digests` by path, `null` without a review comment; unknown keys are errors, `number`, `created-at` and
     `merged-at` required, times converted to UTC), the merged files as arguments, the evaluation flags.
   - **Output:** `--out-dir` must be empty or missing. Per schedule a folder from `--path-template` (default
-    `{slug}/{mr}-{digest | truncate 19}`) with `<slug>.canned-schedule.md` (the file as merged), `.json`, `.svg` (theme
+    `{slug}/{mr}-{digest | afterLast ":" | truncate 12}`, without a `:`, which Windows refuses in file names; until
+    2026-11-22 it was `{digest | truncate 19}`, `sha256:` included) with `<slug>.canned-schedule.md` (the file as merged), `.json`, `.svg` (theme
     auto, no source embed, as `schedule:check`), `.txt` and `.provenance.json`; `manifest.json` at the root, always a
     list. Both carry `"version": 1`; no JSON Schema yet (add one when a consumer relies on the shape). A schedule with
     errors or a file not named after its H1 is exit 1 with nothing written.

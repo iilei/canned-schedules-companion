@@ -24,7 +24,7 @@ import (
 
 // DefaultPath is the path template when the caller gives none: one folder per schedule and merge request, unique by
 // content.
-const DefaultPath = "{slug}/{mr}-{digest | truncate 19}"
+const DefaultPath = `{slug}/{mr}-{digest | afterLast ":" | truncate 12}`
 
 // Manifest is the file at the output root that lists what was published.
 const Manifest = "manifest.json"

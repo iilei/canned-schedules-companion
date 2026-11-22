@@ -416,9 +416,11 @@ must be empty or missing, so nothing stale is published.
 | `forge`, `host`, `project`, `branch`         | where it came from; `branch` is the target branch                               |
 | `tool-version`, `core-version`               | the companion and the core                                                      |
 
-Helpers chain with `|`: `toLower`, `toUpper`, `reverseByDotDelim` (`gitlab.example.com` → `com.example.gitlab`) and
-`truncate N` (the first N characters: `{digest | truncate 19}` is `sha256:` and 12 hex). Anything else is the
-post-fetch script's job. An unknown variable or helper is an error, and a filled path must stay inside the output
+Helpers chain with `|`: `toLower`, `toUpper`, `reverseByDotDelim` (`gitlab.example.com` → `com.example.gitlab`),
+`truncate N` (the first N characters: `{digest | truncate 19}` is `sha256:` and 12 hex) and `afterLast "sep"` (what
+follows the last separator, the whole value without one: `{digest | afterLast ":" | truncate 12}` is 12 hex). Windows
+can't create files or folders with a `:` in their name, so keep the digest's prefix out of the path there. Anything
+else is the post-fetch script's job. An unknown variable or helper is an error, and a filled path must stay inside the output
 directory (relative, no empty, `.` or `..` folders); otherwise the layout is yours. Two schedules writing the same
 file fail the run unless `--force-overwrite`.
 
@@ -443,7 +445,7 @@ jq -r '.schedules[] | .artifactory as $p | .files[] | [.path, .digest, $p] | @ts
 | Flag                   | Meaning                                                                     | Default                                                                                |
 | ---------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | `--merge-request-file` | the merge request and its review, as `publish fetch` writes them (required) |                                                                                        |
-| `--path-template`      | each schedule's folder                                                      | `{slug}/{mr}-{digest \| truncate 19}`                                                  |
+| `--path-template`      | each schedule's folder                                                      | `{slug}/{mr}-{digest \| afterLast ":" \| truncate 12}`                                 |
 | `--metadata`           | one `key=value` template per line; empty: none                              | `schedule`, `digest`, `reviewed`, `merge-request`, `merged-at`, `merged-by`, `project` |
 | `--force-overwrite`    | let a later schedule overwrite an earlier one's file                        | `false`                                                                                |
 | `--out-dir`            | where the files go; must be empty or missing                                | `canned-schedule-publish`                                                              |

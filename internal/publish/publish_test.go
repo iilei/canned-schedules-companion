@@ -94,7 +94,7 @@ func TestPrepareReviewed(t *testing.T) {
 		t.Fatalf("problems %v, mismatches %v", r.Problems, r.Mismatches)
 	}
 
-	dir := "night-shift/42-" + digest[:19]
+	dir := "night-shift/42-" + digest[len("sha256:"):len("sha256:")+12]
 	for _, name := range []string{".md", ".json", ".svg", ".txt", ".provenance.json"} {
 		if _, ok := r.Files[dir+"/night-shift.canned-schedule"+name]; !ok {
 			t.Errorf("missing %s%s; have %v", dir, name, keys(r.Files))
