@@ -17,7 +17,7 @@ spec:
       default: deploy
     version:
       description: The canned-schedules-companion release to install.
-      default: "0.3.5"
+      default: "0.3.6"
       regex: ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$
     image:
       description: The job's image; it also runs the post-fetch script, so it needs that script's tools. An image that already contains the binary, git, curl and gnupg skips the downloads.
