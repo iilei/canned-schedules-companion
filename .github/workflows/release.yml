@@ -37,7 +37,7 @@ jobs:
           persist-credentials: false
 
       # Installs the tools pinned in mise.toml, goreleaser included.
-      - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
           version: 2026.10.19 # mise itself; pinned, see CLAUDE.md
 
@@ -137,7 +137,7 @@ jobs:
           sudo apt-get install -y -qq qemu-user-binfmt
 
       # mise only, no tools: the smoke test needs none, and five runners would otherwise install Go and Node.
-      - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
           version: 2026.10.19 # mise itself; pinned, see CLAUDE.md
           install: false
