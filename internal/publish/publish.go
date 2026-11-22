@@ -5,6 +5,8 @@
 package publish
 
 import (
+	"crypto/md5"  //nolint:gosec // Checksums a store asks for (Checksums), not for security.
+	"crypto/sha1" //nolint:gosec // The same.
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -137,9 +139,18 @@ type Entry struct {
 
 // Out is one published file.
 type Out struct {
-	Path      string `json:"path"`
-	Digest    string `json:"digest"`
-	MediaType string `json:"media-type"`
+	Path   string `json:"path"`
+	Digest string `json:"digest"`
+	// Checksums are what stores such as Artifactory also want from the client (X-Checksum-Sha1, X-Checksum-Md5),
+	// so an upload script passes them on instead of computing them; the digest stays the file's identity.
+	Checksums Checksums `json:"checksums"`
+	MediaType string    `json:"media-type"`
+}
+
+// Checksums are a file's SHA-1 and MD5 in hex, for stores that check them; not digests: nothing is matched by them.
+type Checksums struct {
+	SHA1 string `json:"sha1"`
+	MD5  string `json:"md5"`
 }
 
 type manifest struct {
@@ -477,13 +488,14 @@ func lay(e *Entry, in *Input, opts *Options, outputs []named) (map[string][]byte
 		prov.Review.URL = in.Review.URL
 	}
 
-	for _, o := range outputs {
-		p := path.Join(e.Dir, o.name)
-		out := Out{Path: p, Digest: Digest(o.data), MediaType: o.mediaType}
+	for i := range outputs {
+		p := path.Join(e.Dir, outputs[i].name)
+		o := out(p, outputs[i].data, outputs[i].mediaType)
 
-		files[p] = o.data
-		e.Files = append(e.Files, out)
-		prov.Files = append(prov.Files, Out{Path: o.name, Digest: out.Digest, MediaType: o.mediaType})
+		files[p] = outputs[i].data
+		e.Files = append(e.Files, o)
+		o.Path = outputs[i].name
+		prov.Files = append(prov.Files, o)
 	}
 
 	raw, err := json.MarshalIndent(prov, "", "  ")
@@ -496,7 +508,7 @@ func lay(e *Entry, in *Input, opts *Options, outputs []named) (map[string][]byte
 	p := path.Join(e.Dir, name)
 
 	files[p] = raw
-	e.Files = append(e.Files, Out{Path: p, Digest: Digest(raw), MediaType: mediaJSON})
+	e.Files = append(e.Files, out(p, raw, mediaJSON))
 
 	return files, nil
 }
@@ -546,4 +558,14 @@ func dir(p string) (string, error) {
 	}
 
 	return p, nil
+}
+
+// out describes one file for the manifest and the provenance.
+func out(p string, data []byte, mediaType string) Out {
+	s1, m5 := sha1.Sum(data), md5.Sum(data) //nolint:gosec // Checksums a store asks for, not for security.
+
+	return Out{
+		Path: p, Digest: Digest(data), MediaType: mediaType,
+		Checksums: Checksums{SHA1: hex.EncodeToString(s1[:]), MD5: hex.EncodeToString(m5[:])},
+	}
 }

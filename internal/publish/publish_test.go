@@ -324,3 +324,29 @@ func keys(m map[string][]byte) []string {
 
 	return out
 }
+
+func TestPrepareChecksums(t *testing.T) {
+	t.Parallel()
+
+	r, err := publish.Prepare(input(t, nil), []publish.File{{Path: nightPath, Src: []byte(night)}},
+		options(t, "{slug}", ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m := readManifest(t, r)
+
+	// The raw input's, as sha1sum and md5sum print them.
+	if md := m.Schedules[0].Files[0]; md.Path != "night-shift/night-shift.canned-schedule.md" ||
+		md.Checksums != (publish.Checksums{
+			SHA1: "16fb31ba8c44ffebc1c2d8ea8308bcb638f01e36", MD5: "9a6f7ebd01276068e8496d7a59e38444",
+		}) {
+		t.Errorf("raw input %+v", md)
+	}
+
+	for _, f := range m.Schedules[0].Files {
+		if len(f.Checksums.SHA1) != 40 || len(f.Checksums.MD5) != 32 || f.Digest != publish.Digest(r.Files[f.Path]) {
+			t.Errorf("%s: %+v", f.Path, f)
+		}
+	}
+}
