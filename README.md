@@ -501,8 +501,10 @@ review), e.g. as `scripts/upload-schedules.sh`:
 - [`publish/upload-s3.sh`](publish/upload-s3.sh): every file to `s3://$S3_BUCKET/[$S3_PREFIX/]<path>` with its media
   type, the digest as the checksum S3 verifies, and the metadata as `x-amz-meta-*`; the AWS CLI's own configuration
   for credentials, region and `AWS_ENDPOINT_URL`.
-- `ARTIFACTORY_LATEST=true` / `S3_LATEST=true` also write each schedule's JSON and provenance to `<slug>/latest/`, a
-  stable address for consumers such as a Terraform module; the folders named by the path template keep every publish.
+- **They never overwrite,** so they suit immutable repositories and write-once buckets: a file already there with
+  the same SHA-256 is skipped (a rerun of the job passes), one with another SHA-256 fails the upload. Every publish
+  adds new paths only; consumers find a schedule's newest publish by its metadata (`schedule`, `merged-at`), for
+  example with an Artifactory AQL query, rather than through a moving `latest` copy.
 
 Both need `jq` (installed with `apk` in the components' Alpine image; `curl` too) and check that the manifest is
 version 1. They were run against Artifactory OSS 7.104 and an S3 emulator, and a test runs them with stand-ins for

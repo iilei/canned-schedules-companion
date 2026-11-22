@@ -167,10 +167,12 @@ talks to a forge lives here.
   run with the team's secrets, so they belong under its review), then named as `post-fetch-script`. Artifactory: all
   three checksums from the manifest, the `artifactory` properties, a bearer token or user and password sent as a
   header file (never in argv). S3: media type, the digest as `--checksum-sha256` (xxd, base64), the `s3` metadata
-  (left out with a warning when null). `*_LATEST=true` adds `<slug>/latest/` copies of JSON and provenance for
-  consumers, as the local catalog's script did. `internal/publish/scripts_test.go` runs both on a `Prepare` output
-  with recording stand-ins for curl and aws (skipped on Windows or without sh, jq, xxd, base64); both also ran
-  against the local Artifactory and an S3 emulator.
+  (left out with a warning when null). No `latest/` copies (the user: Artifactory repositories are immutable): the scripts never overwrite; a path
+  already there with the same SHA-256 is skipped (reruns pass), another SHA-256 fails; consumers look up the newest
+  publish by metadata (AQL on `schedule` and `merged-at`). `internal/publish/scripts_test.go` runs both on a `Prepare` output
+  with stand-ins for curl and aws that record uploads and answer lookups (not there, same, other; skipped on
+  Windows or without sh, jq, xxd, base64, sha256sum); both also ran against the local Artifactory and an S3 emulator
+  (first run, rerun skipped, changed file refused).
 - **Checksums next to the digest (decided 2026-11-22, the user's choice over computing them in scripts):** every
   file in the manifest and the provenance carries `checksums: {sha1, md5}` (hex), because Artifactory flags an
   upload without `X-Checksum-Sha1` and `X-Checksum-Md5` ("Client did not publish a checksum value") and checks all
