@@ -79,6 +79,11 @@ talks to a forge lives here.
     `[A-Za-z0-9._/-]` are reported without being echoed (user data in Markdown). `review.json` carries `valid` and the
     names for the forge part. The marker is `<!-- canned-schedules:merge-request-review` with the issue preview's
     stamp (`preview.Stamp.LineFor`); the body digest covers paths and contents.
+  - **The review's digests (implemented 2026-11-22):** the comment's second line opens a hidden block,
+    `<!-- canned-schedules:digests`, one `<path> <digest>` line per file that passed (`publish.Digest` of the raw
+    bytes), then `-->`; each valid section shows the digest as a `Digest:` line. Files with problems get none: the review
+    vouches only for what passed. `review.Digests(comment)` reads the block back for `publish fetch` (CRLF tolerated);
+    a missing or malformed block is false, read as no review. No escaping: `safePath` rules out spaces and `-->`.
   - `review post --forge gitlab`: the GitLab client's notes take `forge.Upsert.MergeRequest` (`/merge_requests/`),
     plus `MergeRequest`, merge request labels and `SetMergeRequestTitle`. Skips when the MR's head isn't
     `--head-sha`; leaves a note with the same stamp alone; `--label` as for issues; `--retitle` only while the title
@@ -266,8 +271,7 @@ talks to a forge lives here.
 ## Open
 
 1. **Step 3, publishing** (designed 2026-11-21 and 2026-11-22 in the core's CLAUDE.md, "Step 3, publishing";
-   `publish prepare` built, see Decisions): next the review records each changed schedule's digest in its stamped
-   comment; `publish fetch --forge …` finds the merge request the pushed commit came from (works after squash and
+   `publish prepare` and the review's digests built, see Decisions): next `publish fetch --forge …` finds the merge request the pushed commit came from (works after squash and
    rebase merges) and reads those digests from the newest review comment by the bot into `merge-request.json`; a
    forge verb posts a note on the merged merge request for every schedule `publish prepare` published without the
    reviewed digest; then the Action and the GitLab component (path and metadata templates, `force-overwrite`, the

@@ -7,6 +7,7 @@ import (
 	cs "github.com/iilei/canned-schedules"
 
 	"github.com/iilei/canned-schedules-companion/internal/preview"
+	"github.com/iilei/canned-schedules-companion/internal/publish"
 	"github.com/iilei/canned-schedules-companion/internal/review"
 )
 
@@ -123,5 +124,62 @@ func TestTitles(t *testing.T) {
 		if review.DefaultTitle(title) != want {
 			t.Errorf("DefaultTitle(%q) != %v", title, want)
 		}
+	}
+}
+
+func TestDigests(t *testing.T) {
+	t.Parallel()
+
+	nightPath := "schedules/night-shift.canned-schedule.md"
+
+	res, err := review.Render([]review.File{
+		{Path: nightPath, Src: []byte(night)},
+		{Path: "schedules/broken.canned-schedule.md", Src: []byte("# Broken!\n")},
+	}, opts(), nil, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c := string(res.Comment)
+	want := publish.Digest([]byte(night))
+
+	// Only the file that passed: the review vouches for nothing else.
+	got, ok := review.Digests(c)
+	if !ok || len(got) != 1 || got[nightPath] != want {
+		t.Fatalf("digests %v, %v", got, ok)
+	}
+
+	if !strings.Contains(c, "Digest: `"+want+"`") {
+		t.Errorf("no visible digest in\n%s", c)
+	}
+
+	// The forge may hand the comment back with CRLF line endings.
+	if got, ok := review.Digests(strings.ReplaceAll(c, "\n", "\r\n")); !ok || got[nightPath] != want {
+		t.Errorf("CRLF: %v, %v", got, ok)
+	}
+
+	stamp, _, _ := strings.Cut(c, "\n")
+	for name, comment := range map[string]string{
+		"no block":   stamp + "\n### Schedule review\n",
+		"unclosed":   stamp + "\n" + review.DigestsMarker + "\n" + nightPath + " " + want + "\n",
+		"bad digest": stamp + "\n" + review.DigestsMarker + "\n" + nightPath + " abc\n-->\n",
+		"bad path":   stamp + "\n" + review.DigestsMarker + "\na<b " + want + "\n-->\n",
+		"duplicate": stamp + "\n" + review.DigestsMarker + "\n" + nightPath + " " + want + "\n" + nightPath + " " +
+			want + "\n-->\n",
+		"not a review": "<!-- canned-schedules:issue-preview x -->\n" + review.DigestsMarker + "\n-->\n",
+	} {
+		if _, ok := review.Digests(comment); ok {
+			t.Errorf("%s: want false", name)
+		}
+	}
+
+	// No schedule passed: an empty list, which still is a review.
+	res, err = review.Render(nil, opts(), nil, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, ok := review.Digests(string(res.Comment)); !ok || len(got) != 0 {
+		t.Errorf("empty: %v, %v", got, ok)
 	}
 }

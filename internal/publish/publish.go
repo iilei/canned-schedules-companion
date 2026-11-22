@@ -209,7 +209,7 @@ func ParseInput(raw []byte) (*Input, error) {
 
 	if in.Review != nil {
 		for p, d := range in.Review.Digests {
-			if !digestPattern.MatchString(d) {
+			if !IsDigest(d) {
 				return nil, fmt.Errorf("%w: review.digests[%q] is not a sha256:<64 hex> digest", errInput, p)
 			}
 		}
@@ -217,6 +217,9 @@ func ParseInput(raw []byte) (*Input, error) {
 
 	return &in, nil
 }
+
+// IsDigest reports whether s is a digest as Digest writes them.
+func IsDigest(s string) bool { return digestPattern.MatchString(s) }
 
 // Digest is a content digest as Docker writes them: sha256:<64 hex>.
 func Digest(data []byte) string {
