@@ -13,6 +13,7 @@
 //	canned-schedules-companion promote open --forge github|gitlab --repo P --issue N --base-branch B [flags] dir
 //	canned-schedules-companion publish fetch --forge github|gitlab --repo P --commit SHA [flags]
 //	canned-schedules-companion publish prepare --merge-request-file merge-request.json [flags] file...
+//	canned-schedules-companion publish post --forge github|gitlab --repo P [flags] dir
 //
 // Every step splits into local verbs (render, prepare, check), which read and write files only, and forge verbs
 // (post, open, publish, retire), which write to GitHub or GitLab, support --dry-run and take the forge explicitly.
@@ -66,6 +67,7 @@ const usage = `usage: canned-schedules-companion preview render [flags] request.
        canned-schedules-companion promote open --forge github|gitlab --repo P --issue N --base-branch B [flags] dir
        canned-schedules-companion publish fetch --forge github|gitlab --repo P --commit SHA [flags]
        canned-schedules-companion publish prepare --merge-request-file merge-request.json [flags] file...
+       canned-schedules-companion publish post --forge github|gitlab --repo P [flags] dir
        canned-schedules-companion --version
 `
 
@@ -82,6 +84,7 @@ var commands = map[string]func(args []string, stdout, stderr io.Writer) int{
 	"promote open":     promoteOpen,
 	"publish fetch":    publishFetch,
 	"publish prepare":  publishPrepare,
+	"publish post":     publishPost,
 }
 
 // version is set by goreleaser (-ldflags -X main.version=…); without it the module version is used.

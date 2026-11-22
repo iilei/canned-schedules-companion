@@ -156,6 +156,11 @@ talks to a forge lives here.
 - **Single braces with `{{`/`}}` escapes (decided 2026-11-22):** the user kept `{…}` (as `site.json`) over `{{…}}`,
   which suggests Go templates or Helm and reads as a nested map in unquoted YAML; `{{` and `}}` are a literal brace,
   read left to right (`{{{name}` is `{` plus the name), so paths and metadata can hold braces.
+- **`publish post` (implemented 2026-11-22):** `publish.NoteFor(manifest)` writes the note (marker
+  `<!-- canned-schedules:publish-note -->`, a table of path, reason, published and reviewed digest; paths and the
+  merge commit echoed only when plain, digests only when well-formed), empty when every schedule was reviewed: then
+  nothing is written. The command upserts it on the merge request the manifest names (`newMergeRequestClient`), leaves
+  an identical note alone and exits 0 either way: the note is the signal, not a failure.
 - **`publish prepare` (implemented 2026-11-22, step 3's local part, `internal/publish`):**
   - **Always rendered from the file as merged (decided 2026-11-22, revising "use the reviewed files"):** review outputs
     come from the merge request's own pipeline, which the merge request can change, so reusing them could publish
@@ -287,8 +292,7 @@ talks to a forge lives here.
 ## Open
 
 1. **Step 3, publishing** (designed 2026-11-21 and 2026-11-22 in the core's CLAUDE.md, "Step 3, publishing";
-   `publish fetch`, `publish prepare` and the review's digests built, see Decisions): next a forge verb posts a note on the merged merge request for every schedule `publish prepare` published without the
-   reviewed digest; then the Action and the GitLab component (path and metadata templates, `force-overwrite`, the
+   `publish fetch`, `publish prepare`, `publish post` and the review's digests built, see Decisions): next the Action and the GitLab component (path and metadata templates, `force-overwrite`, the
    post-fetch script, which runs once over the output: S3, Artifactory, a commit elsewhere), tested end to end on the
    local GitLab against the local Artifactory.
 2. **GitLab catalog, only if teams ask:** a project on gitlab.com for catalog search and the short `component:` syntax.
