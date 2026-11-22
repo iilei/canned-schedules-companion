@@ -99,7 +99,7 @@ if [ "$have" != "$want" ]; then
   exit 1
 fi
 echo "action.yml installs $have"
-for f in playground/action.yml review/action.yml promote/action.yml; do
+for f in playground/action.yml review/action.yml promote/action.yml publish/action.yml; do
   have=$(awk '/^  version:/ { found = 1 } found && /default:/ { gsub(/"/, "", $2); print $2; exit }' "$f")
   if [ "$have" != "$want" ]; then
     echo "$f installs $have, but the tag is $want: bump the default of its version input" >&2
@@ -119,7 +119,7 @@ if [ "$have" != "$want" ]; then
   exit 1
 fi
 echo "templates/playground.yml installs $have"
-for f in templates/promote.yml; do
+for f in templates/promote.yml templates/publish.yml; do
   have=$(awk '/^    version:/ { found = 1 } found && /default:/ { gsub(/"/, "", $2); print $2; exit }' "$f")
   if [ "$have" != "$want" ]; then
     echo "$f installs $have, but the tag is $want: bump the default of its version input" >&2

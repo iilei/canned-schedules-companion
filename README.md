@@ -495,6 +495,85 @@ last review, not in the review, no review comment), the published digest and the
 published as reviewed, it writes nothing. The same note again is left alone. Flags as for `review post`
 (`--author`, `--token-env`, `--api-url`, `--dry-run`); the marker is `<!-- canned-schedules:publish-note -->`.
 
+## Publishing on GitLab and GitHub
+
+Both wrappers run on a **push to the default branch** that changes `catalog-dir/*.canned-schedule.md`:
+[`publish fetch`](#publish-fetch), [`publish prepare`](#publish-prepare) with the args file of the pushed commit and
+the schedule files the push adds or changes, then the team's **post-fetch script** with the output directory, then
+[`publish post`](#publish-post). A direct push (no merged merge request) fails the job and publishes nothing, so
+protect the default branch. `dry-run` reads and lays out everything, but runs no post-fetch script and posts no note.
+
+The post-fetch script is a file in the repository, run with the output directory as its argument; it uploads, and
+should fail when the upload fails. Its secrets are the job's: CI/CD variables on GitLab, the `env` of the step that
+uses the action on GitHub. The upload loops under [`publish prepare`](#publish-prepare) work as such a script, with
+`cd "$1"` first.
+
+**GitLab:** `templates/publish.yml` needs the review's `CANNED_SCHEDULES_TOKEN` and runs the script in its `image`,
+which needs the script's tools (`curl`, `jq`, the AWS CLI, …). One publish runs at a time (`resource_group`).
+
+```yaml
+include:
+  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.4/templates/publish.yml
+    integrity: sha256-HyWLHKHjiBbiqVRtutO52F78sALoKv+PduV+eK3lh/I=
+    inputs:
+      post-fetch-script: scripts/upload-schedules.sh
+```
+
+**GitHub:** `publish/action.yml`, with `pull-requests: read` (which pull request a commit came from) and
+`issues: write` (the note):
+
+```yaml
+name: schedule publish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - schedules/*.canned-schedule.md
+
+permissions:
+  contents: read
+
+concurrency:
+  group: schedule-publish
+
+jobs:
+  publish:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+    steps:
+      - uses: actions/checkout@<commit SHA> # <release tag>
+        with:
+          fetch-depth: 0 # The diff needs the commit before the push.
+          persist-credentials: false
+      - uses: iilei/canned-schedules-companion/publish@<commit SHA> # <release tag>
+        env:
+          ARTIFACTORY_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
+        with:
+          post-fetch-script: scripts/upload-schedules.sh
+```
+
+| Input               | Meaning                                                                                        | Default                                                |
+| ------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `version`           | the companion release to install                                                               | this wrapper's release                                 |
+| `catalog-dir`       | the catalog's folder; only its `*.canned-schedule.md` files are published                      | `schedules`                                            |
+| `args-file`         | the flags to render with, read from the pushed commit                                          | `canned-schedules.args`                                |
+| `path-template`     | each schedule's folder                                                                         | `{slug}/{mr}-{digest \| afterLast ":" \| truncate 12}` |
+| `metadata`          | one `key=value` template per line; empty: the default keys                                     |                                                        |
+| `force-overwrite`   | let a later schedule overwrite an earlier one's file                                           | `false`                                                |
+| `post-fetch-script` | the script in the repository; empty: GitLab keeps the output as artifacts, GitHub in `out-dir` |                                                        |
+| `note`              | keep the note on the merge request for schedules published without review                      | `true`                                                 |
+| `dry-run`           | read and lay out, but run no script and post no note                                           | `false`                                                |
+
+GitLab also takes `stage` (default `deploy`), `image` and `api-url`; GitHub `token` and `comment-author`, and has
+the output `out-dir`. Tested end to end on a local GitLab 19.4.1 against Artifactory OSS: a reviewed merge request
+publishes with `reviewed=true` and no note; one changed after its review publishes with `reviewed=false` and the note;
+a direct push publishes nothing.
+
 ## GitLab CI/CD component
 
 `templates/issue-preview.yml` checks an issue that proposes a schedule and keeps one note on it up to date, with the week shown
