@@ -168,7 +168,9 @@ talks to a forge lives here.
   reviewed MR !1 → `reviewed=true`, no note, properties and checksum read back (`{{literal}}` as `{literal}`); !2
   changed after its review with `-o ci.skip` → `reviewed=false`, `changed`, the note with both digests, a title with
   `;`, `:` and `ü` intact; a direct push → failed, nothing published. GitLab's `$[[ inputs ]]` carried the default
-  path template's quotes and braces unchanged. The GitHub action is untested until a release (it installs one).
+  path template's quotes and braces unchanged. **On GitHub (v0.3.5, 2026-11-22):** the demo repo's `schedule publish`
+  workflow (demo #18; the post-fetch script writes the job summary, the output is an artifact) published PR #19 as
+  reviewed, with no note: `commits/:sha/pulls` found the merge commit, the review's digest matched.
 - **`publish post` (implemented 2026-11-22):** `publish.NoteFor(manifest)` writes the note (marker
   `<!-- canned-schedules:publish-note -->`, a table of path, reason, published and reviewed digest; paths and the
   merge commit echoed only when plain, digests only when well-formed), empty when every schedule was reviewed: then
@@ -306,8 +308,8 @@ talks to a forge lives here.
 
 1. **Step 3, publishing** (designed 2026-11-21 and 2026-11-22 in the core's CLAUDE.md, "Step 3, publishing";
    the commands and both wrappers built, the GitLab component tested end to end on the local GitLab against the local
-   Artifactory, see Decisions): next a release, then the GitHub action against the demo repo with an S3 or Artifactory
-   script, and the core's docs (`docs/self-hosted-catalog.md`) on publishing.
+   Artifactory, the action on the demo repo, released in v0.3.5, see Decisions): next a real catalog uploading for a
+   few weeks (the core's item 2), and what it needs.
 2. **GitLab catalog, only if teams ask:** a project on gitlab.com for catalog search and the short `component:` syntax.
 3. **The screen recording** with the public demo repo
    [`canned-schedules-demo`](https://github.com/iilei/canned-schedules-demo), a copy of the core's `examples/consumer`.

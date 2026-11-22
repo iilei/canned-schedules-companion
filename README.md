@@ -572,7 +572,8 @@ jobs:
 GitLab also takes `stage` (default `deploy`), `image` and `api-url`; GitHub `token` and `comment-author`, and has
 the output `out-dir`. Tested end to end on a local GitLab 19.4.1 against Artifactory OSS: a reviewed merge request
 publishes with `reviewed=true` and no note; one changed after its review publishes with `reviewed=false` and the note;
-a direct push publishes nothing.
+a direct push publishes nothing. The action ran the same way on the demo repo
+[`canned-schedules-demo`](https://github.com/iilei/canned-schedules-demo/actions/workflows/schedule-publish.yml).
 
 ## GitLab CI/CD component
 
