@@ -240,19 +240,20 @@ talks to a forge lives here.
 
 ## Open
 
-1. **Step 3, publishing** (designed 2026-11-21 in the core's CLAUDE.md, "Step 3, publishing"; not built): the merge
-   request review attaches each changed schedule's generated files to the merge request (job artifacts on GitLab,
-   workflow artifacts on GitHub), with each file's content hash; on merge, a publish action / component finds the merge
-   request the pushed commit came from (works after squash and rebase merges), fetches its latest review files,
-   uses a schedule's reviewed files when the merged file's content hash equals the reviewed one and renders it again
-   otherwise with the published commit's args file (a rebase or any later edit; the provenance says which, with both
-   hashes), writes them with the raw
-   input and a provenance file (from the forge's records: the merge request with its creation and merge times, author
-   and merger, the review run, path and content hash, tool versions, the review's stamp; no git dates) under a path
-   from its inputs, and runs a user-provided post-fetch script (S3, Artifactory, a commit elsewhere). Local part:
-   compare content hashes and write the layout and provenance; forge part: find the merge request, download its
-   review's files.
-   Open questions are listed there.
+1. **Step 3, publishing** (designed 2026-11-21 and 2026-11-22 in the core's CLAUDE.md, "Step 3, publishing"; not
+   built): the merge request review attaches each changed schedule's generated files to the merge request (job
+   artifacts on GitLab, workflow artifacts on GitHub), with each file's digest (`sha256:<hex>`, as Docker writes
+   them); on merge, `publish fetch --forge …` finds the merge request the pushed commit came from (works after squash
+   and rebase merges) and downloads its latest review files, and `publish prepare` uses a schedule's reviewed files
+   when the merged file's digest equals the reviewed one and renders it again otherwise with the published commit's
+   args file (a rebase, any later edit, or expired review files; the provenance says which, with both digests). One
+   schedule is the unit: a path template (the `site.json` placeholders, every variable allowed, helpers `toLower`,
+   `toUpper`, `reverseByDotDelim`, `truncate N`) names each schedule's folder, files keep their catalog names, and
+   `manifest.json` always lists the schedules, with metadata from a template of its own, encoded for Artifactory and
+   S3. Two schedules writing one file fail the run unless `--force-overwrite`. A user-provided post-fetch script
+   runs once over the output (S3, Artifactory, a commit elsewhere). Local part: compare digests, render, write layout,
+   provenance, metadata and manifest; forge part: find the merge request, download its review's files. Open
+   questions are listed there.
 2. **GitLab catalog, only if teams ask:** a project on gitlab.com for catalog search and the short `component:` syntax.
 3. **The screen recording** with the public demo repo
    [`canned-schedules-demo`](https://github.com/iilei/canned-schedules-demo), a copy of the core's `examples/consumer`.
