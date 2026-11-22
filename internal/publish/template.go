@@ -1,0 +1,181 @@
+package publish
+
+import (
+	"errors"
+	"fmt"
+	"slices"
+	"strconv"
+	"strings"
+	"unicode/utf8"
+)
+
+// The helpers' names.
+const (
+	helperLower    = "toLower"
+	helperUpper    = "toUpper"
+	helperReverse  = "reverseByDotDelim"
+	helperTruncate = "truncate"
+)
+
+// Variables are the names a template may use, in the order the docs list them. Every one is available in the path
+// and in the metadata.
+var Variables = []string{
+	"name", "slug", "path", "digest", "reviewed",
+	"mr", "title", "author", "merged-by", "created-at", "merged-at", "merged-date",
+	"forge", "host", "project", "branch",
+	"tool-version", "core-version",
+}
+
+// Helpers are the functions a placeholder may pipe its value through.
+var Helpers = []string{helperLower, helperUpper, helperReverse, helperTruncate}
+
+var errTemplate = errors.New("template")
+
+// Template is a parsed path or metadata template: text with placeholders such as {slug} or
+// {digest | truncate 19}, the same braces as site.json's URL templates.
+type Template struct {
+	parts []part
+}
+
+type part struct {
+	literal string
+	name    string
+	helpers []helper
+}
+
+type helper struct {
+	name string
+	n    int
+}
+
+// Parse reads a template. Unknown variables and helpers are errors, so a typo can't turn into an empty value.
+func Parse(text string) (*Template, error) {
+	t := &Template{}
+	rest := text
+
+	for rest != "" {
+		open := strings.IndexAny(rest, "{}")
+		if open < 0 {
+			t.parts = append(t.parts, part{literal: rest})
+
+			break
+		}
+
+		if rest[open] == '}' {
+			return nil, fmt.Errorf("%w %q: a } without a { before it", errTemplate, text)
+		}
+
+		if open > 0 {
+			t.parts = append(t.parts, part{literal: rest[:open]})
+		}
+
+		end := strings.IndexAny(rest[open+1:], "{}")
+		if end < 0 || rest[open+1+end] == '{' {
+			return nil, fmt.Errorf("%w %q: a { without a } after it", errTemplate, text)
+		}
+
+		p, err := placeholder(rest[open+1 : open+1+end])
+		if err != nil {
+			return nil, fmt.Errorf("%w %q: %w", errTemplate, text, err)
+		}
+
+		t.parts = append(t.parts, p)
+		rest = rest[open+1+end+1:]
+	}
+
+	return t, nil
+}
+
+// Execute fills the template. vars must hold every name in Variables.
+func (t *Template) Execute(vars map[string]string) string {
+	var b strings.Builder
+
+	for _, p := range t.parts {
+		if p.name == "" {
+			b.WriteString(p.literal)
+
+			continue
+		}
+
+		v := vars[p.name]
+		for _, h := range p.helpers {
+			v = h.apply(v)
+		}
+
+		b.WriteString(v)
+	}
+
+	return b.String()
+}
+
+func placeholder(s string) (part, error) {
+	fields := strings.Split(s, "|")
+
+	name := strings.TrimSpace(fields[0])
+	if !slices.Contains(Variables, name) {
+		return part{}, fmt.Errorf("unknown variable %q (known: %s)", name, strings.Join(Variables, ", "))
+	}
+
+	p := part{name: name}
+
+	for _, f := range fields[1:] {
+		h, err := parseHelper(strings.Fields(f))
+		if err != nil {
+			return part{}, err
+		}
+
+		p.helpers = append(p.helpers, h)
+	}
+
+	return p, nil
+}
+
+func parseHelper(words []string) (helper, error) {
+	if len(words) == 0 {
+		return helper{}, errors.New("an empty helper after |")
+	}
+
+	name, args := words[0], words[1:]
+
+	switch name {
+	case helperLower, helperUpper, helperReverse:
+		if len(args) != 0 {
+			return helper{}, fmt.Errorf("%s takes no argument", name)
+		}
+
+		return helper{name: name}, nil
+	case helperTruncate:
+		if len(args) != 1 {
+			return helper{}, errors.New("truncate takes one number: truncate 12")
+		}
+
+		n, err := strconv.Atoi(args[0])
+		if err != nil || n < 1 {
+			return helper{}, fmt.Errorf("truncate wants a positive number, not %q", args[0])
+		}
+
+		return helper{name: name, n: n}, nil
+	}
+
+	return helper{}, fmt.Errorf("unknown helper %q (known: %s)", name, strings.Join(Helpers, ", "))
+}
+
+func (h helper) apply(v string) string {
+	switch h.name {
+	case helperLower:
+		return strings.ToLower(v)
+	case helperUpper:
+		return strings.ToUpper(v)
+	case helperReverse:
+		parts := strings.Split(v, ".")
+		slices.Reverse(parts)
+
+		return strings.Join(parts, ".")
+	default: // truncate: the first n characters, not bytes.
+		if utf8.RuneCountInString(v) <= h.n {
+			return v
+		}
+
+		return string([]rune(v)[:h.n])
+	}
+}

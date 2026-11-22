@@ -136,6 +136,31 @@ talks to a forge lives here.
     `templates/promote.yml` runs on the issue preview's webhook pipeline and acts only when the event's
     `changes.labels` added the label; it reads the issue's current text through the API, the args file from the
     checkout, and needs `CANNED_SCHEDULES_TOKEN` with the Developer role.
+- **`publish prepare` (implemented 2026-11-22, step 3's local part, `internal/publish`):**
+  - **Always rendered from the file as merged (decided 2026-11-22, revising "use the reviewed files"):** review outputs
+    come from the merge request's own pipeline, which the merge request can change, so reusing them could publish
+    crafted files under a correct-looking provenance. The review vouches by digest only; a digest that differs, a file
+    the review didn't cover and a merge request without a review are published anyway (`reviewed: false`, reasons
+    `changed`, `not-reviewed`, `no-review`) and the forge part posts a note on the merge request (the user's choice
+    over blocking: git and the published files never disagree). Retention of review artifacts stops mattering.
+  - **Input:** `--merge-request-file` (`merge-request.json`: `merge-request` with the forge's facts, `review` with
+    `url` and `digests` by path, `null` without a review comment; unknown keys are errors, `number`, `created-at` and
+    `merged-at` required, times converted to UTC), the merged files as arguments, the evaluation flags.
+  - **Output:** `--out-dir` must be empty or missing. Per schedule a folder from `--path-template` (default
+    `{slug}/{mr}-{digest | truncate 19}`) with `<slug>.canned-schedule.md` (the file as merged), `.json`, `.svg` (theme
+    auto, no source embed, as `schedule:check`), `.txt` and `.provenance.json`; `manifest.json` at the root, always a
+    list. Both carry `"version": 1`; no JSON Schema yet (add one when a consumer relies on the shape). A schedule with
+    errors or a file not named after its H1 is exit 1 with nothing written.
+  - **Templates** (`Parse`, `ParseMetadata`): `{var | helper …}`, every variable of `Variables` in both, helpers
+    `toLower`, `toUpper`, `reverseByDotDelim`, `truncate N` (runes). No escape for braces (a stray `{` or `}` is an
+    error). Checked: unknown names, and a filled path must be relative without empty, `.` or `..` segments,
+    backslashes or control characters. Collisions fail unless `--force-overwrite` (the later schedule wins, the earlier
+    entry stops listing the file).
+  - **Metadata:** default keys `schedule`, `digest`, `reviewed`, `merge-request`, `merged-at`, `merged-by`,
+    `project`; keys `^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$`, unique, no control characters in values. The manifest has
+    `metadata` (map), `artifactory` (matrix parameters, every byte outside RFC 3986's unreserved set percent-encoded;
+    verified against the local Artifactory OSS 7.104.12: umlauts, `;`, `,` and `=` read back exactly, with an
+    `X-Checksum-Sha256` upload) and `s3` (non-ASCII values RFC 2047 B-encoded; `null` plus a warning above 2 KB).
 - **`preview post --forge github` (implemented 2026-11-08):** `internal/forge/github` with plain `net/http` (no
   dependency): lists the issue's comments (100 per page), takes those starting with the marker and written by
   `--author` (default `github-actions[bot]`), updates the oldest, deletes the others, or creates one. Everything is
@@ -240,20 +265,14 @@ talks to a forge lives here.
 
 ## Open
 
-1. **Step 3, publishing** (designed 2026-11-21 and 2026-11-22 in the core's CLAUDE.md, "Step 3, publishing"; not
-   built): the merge request review attaches each changed schedule's generated files to the merge request (job
-   artifacts on GitLab, workflow artifacts on GitHub), with each file's digest (`sha256:<hex>`, as Docker writes
-   them); on merge, `publish fetch --forge …` finds the merge request the pushed commit came from (works after squash
-   and rebase merges) and downloads its latest review files, and `publish prepare` uses a schedule's reviewed files
-   when the merged file's digest equals the reviewed one and renders it again otherwise with the published commit's
-   args file (a rebase, any later edit, or expired review files; the provenance says which, with both digests). One
-   schedule is the unit: a path template (the `site.json` placeholders, every variable allowed, helpers `toLower`,
-   `toUpper`, `reverseByDotDelim`, `truncate N`) names each schedule's folder, files keep their catalog names, and
-   `manifest.json` always lists the schedules, with metadata from a template of its own, encoded for Artifactory and
-   S3. Two schedules writing one file fail the run unless `--force-overwrite`. A user-provided post-fetch script
-   runs once over the output (S3, Artifactory, a commit elsewhere). Local part: compare digests, render, write layout,
-   provenance, metadata and manifest; forge part: find the merge request, download its review's files. Open
-   questions are listed there.
+1. **Step 3, publishing** (designed 2026-11-21 and 2026-11-22 in the core's CLAUDE.md, "Step 3, publishing";
+   `publish prepare` built, see Decisions): next the review records each changed schedule's digest in its stamped
+   comment; `publish fetch --forge …` finds the merge request the pushed commit came from (works after squash and
+   rebase merges) and reads those digests from the newest review comment by the bot into `merge-request.json`; a
+   forge verb posts a note on the merged merge request for every schedule `publish prepare` published without the
+   reviewed digest; then the Action and the GitLab component (path and metadata templates, `force-overwrite`, the
+   post-fetch script, which runs once over the output: S3, Artifactory, a commit elsewhere), tested end to end on the
+   local GitLab against the local Artifactory.
 2. **GitLab catalog, only if teams ask:** a project on gitlab.com for catalog search and the short `component:` syntax.
 3. **The screen recording** with the public demo repo
    [`canned-schedules-demo`](https://github.com/iilei/canned-schedules-demo), a copy of the core's `examples/consumer`.
@@ -270,6 +289,8 @@ talks to a forge lives here.
 - `internal/review`: the merge request review's local part (`Render`, `Title`, `DefaultTitle`), pure.
 - `templates/review.yml`: the GitLab component that reviews merge requests.
 - `promote/action.yml`, `templates/promote.yml`, `internal/promote`: promotion of an approved issue (step 2).
+- `internal/publish`: `publish prepare`'s local part (`ParseInput`, `Parse`, `ParseMetadata`, `Prepare`, `Digest`,
+  `Artifactory`, `S3`), pure (step 3).
 - `playground/action.yml`, `review/action.yml`: the GitHub Actions for the playground on Pages and the pull request
   review; `action:version` checks their version defaults with the others.
 - `internal/preview`: step 1's local part (`Render`, `Body`, `ParseLink`, `ParseFiddleBase`, `FiddleLink`), pure.
