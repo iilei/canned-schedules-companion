@@ -30,6 +30,10 @@ func TestTemplate(t *testing.T) {
 		`{digest | afterLast ":" | truncate 12}`: "3f2a9c1b04de",
 		`{host | afterLast "."}`:                 "com",
 		`{host | afterLast "::"}`:                "gitlab.example.com",
+		"{{slug}}":                               "{slug}",
+		"a{{b}}c-{name | toLower}}}":             "a{b}c-night shift}",
+		"}}{{":                                   "}{",
+		"{{{name}":                               "{Night Shift",
 	} {
 		p, err := publish.Parse(tmpl)
 		if err != nil {
@@ -46,7 +50,7 @@ func TestTemplate(t *testing.T) {
 	for _, tmpl := range []string{
 		"{nme}", "{name | lower}", "{name | truncate}", "{name | truncate 0}", "{name | truncate x}",
 		"{name | toLower 2}", "{name |}", "{name | afterLast}", `{name | afterLast ""}`,
-		"{name | afterLast :}", `{name | afterLast ":" "."}`, `{name | afterLast "a"b"}`, "{name", "name}", "{{name}}", "{name | truncate 1 2}",
+		"{name | afterLast :}", `{name | afterLast ":" "."}`, `{name | afterLast "a"b"}`, "{name", "name}", "{name | truncate 1 2}", "{name}}}}", "{na{me}",
 	} {
 		if _, err := publish.Parse(tmpl); err == nil {
 			t.Errorf("%q: want an error", tmpl)
