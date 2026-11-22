@@ -1,7 +1,7 @@
 # The GitLab flow in screenshots
 
 What contributors and reviewers see in a project that
-[includes the template](../../README.md#gitlab-cicd-component). The screenshots show companion `v0.1.3` on a local GitLab.
+[includes the template](../gitlab.md#gitlab-cicd-component). The screenshots show companion `v0.1.3` on a local GitLab.
 Runner ids and token prefixes are blurred in the job log.
 
 ## 1. Open an issue

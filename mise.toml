@@ -12,6 +12,8 @@ syft = "1.55.0"
 actionlint = "1.7.12"
 # actionlint checks the workflows' shell scripts with it.
 shellcheck = "0.11.0"
+# The documentation site (docs:build); docs/requirements.txt is resolved for this minor.
+python = "3.14"
 
 [tasks.fmt]
 description = "Format Go code using the configured golangci-lint formatters"
@@ -290,3 +292,15 @@ for f in *.tar.gz *.zip; do
 done
 echo "release verified: signed by $fpr, checksums and sidecars match"
 '''
+
+[tasks."docs:build"]
+description = "Build the documentation site into dist/docs (Sphinx, Furo and MyST, hash-pinned in docs/requirements.txt)"
+run = "sh docs/build.sh"
+
+[tasks."docs:serve"]
+description = "Build and serve the documentation on http://127.0.0.1:<port> (default 8080)"
+depends = ["docs:build"]
+usage = '''
+flag "-p --port <port>" env="PORT" default="8080" help="Port to listen on (localhost only)"
+'''
+run = 'python3 -m http.server --bind 127.0.0.1 --directory dist/docs "$usage_port"'
