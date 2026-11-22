@@ -88,7 +88,7 @@ echo "the action's files are complete"
 '''
 
 [tasks."action:version"]
-description = "Check that the actions, the GitLab components and the README name the release they are tagged with"
+description = "Check that the actions, the GitLab components and the docs name the release they are tagged with"
 usage = '''
 arg "<tag>" help="The release tag, e.g. v1.2.3"
 '''
@@ -129,15 +129,15 @@ for f in templates/promote.yml templates/publish.yml; do
   fi
   echo "$f installs $have"
   integrity=sha256-$(openssl dgst -sha256 -binary "$f" | base64)
-  grep -Fq "/refs/tags/$usage_tag/$f" README.md || {
-    echo "README.md doesn't include $f from $usage_tag" >&2
+  grep -Fq "/refs/tags/$usage_tag/$f" docs/*.md || {
+    echo "the docs don't include $f from $usage_tag" >&2
     exit 1
   }
-  grep -Fq "integrity: $integrity" README.md || {
-    echo "README.md has another integrity for $f: want $integrity" >&2
+  grep -Fq "integrity: $integrity" docs/*.md || {
+    echo "the docs have another integrity for $f: want $integrity" >&2
     exit 1
   }
-  echo "README.md includes $f from $usage_tag"
+  echo "the docs include $f from $usage_tag"
 done
 have=$(awk '/^    version:/ { found = 1 } found && /default:/ { gsub(/"/, "", $2); print $2; exit }' templates/review.yml)
 if [ "$have" != "$want" ]; then
@@ -146,35 +146,35 @@ if [ "$have" != "$want" ]; then
 fi
 echo "templates/review.yml installs $have"
 integrity=sha256-$(openssl dgst -sha256 -binary templates/issue-preview.yml | base64)
-grep -Fq "/refs/tags/$usage_tag/templates/issue-preview.yml" README.md || {
-  echo "README.md doesn't include the template from $usage_tag" >&2
+grep -Fq "/refs/tags/$usage_tag/templates/issue-preview.yml" docs/*.md || {
+  echo "the docs don't include the template from $usage_tag" >&2
   exit 1
 }
-grep -Fq "integrity: $integrity" README.md || {
-  echo "README.md has another integrity for the template: want $integrity" >&2
+grep -Fq "integrity: $integrity" docs/*.md || {
+  echo "the docs have another integrity for the template: want $integrity" >&2
   exit 1
 }
-echo "README.md includes the template from $usage_tag"
+echo "the docs include the template from $usage_tag"
 integrity=sha256-$(openssl dgst -sha256 -binary templates/playground.yml | base64)
-grep -Fq "/refs/tags/$usage_tag/templates/playground.yml" README.md || {
-  echo "README.md doesn't include templates/playground.yml from $usage_tag" >&2
+grep -Fq "/refs/tags/$usage_tag/templates/playground.yml" docs/*.md || {
+  echo "the docs don't include templates/playground.yml from $usage_tag" >&2
   exit 1
 }
-grep -Fq "integrity: $integrity" README.md || {
-  echo "README.md has another integrity for templates/playground.yml: want $integrity" >&2
+grep -Fq "integrity: $integrity" docs/*.md || {
+  echo "the docs have another integrity for templates/playground.yml: want $integrity" >&2
   exit 1
 }
-echo "README.md includes templates/playground.yml from $usage_tag"
+echo "the docs include templates/playground.yml from $usage_tag"
 integrity=sha256-$(openssl dgst -sha256 -binary templates/review.yml | base64)
-grep -Fq "/refs/tags/$usage_tag/templates/review.yml" README.md || {
-  echo "README.md doesn't include templates/review.yml from $usage_tag" >&2
+grep -Fq "/refs/tags/$usage_tag/templates/review.yml" docs/*.md || {
+  echo "the docs don't include templates/review.yml from $usage_tag" >&2
   exit 1
 }
-grep -Fq "integrity: $integrity" README.md || {
-  echo "README.md has another integrity for templates/review.yml: want $integrity" >&2
+grep -Fq "integrity: $integrity" docs/*.md || {
+  echo "the docs have another integrity for templates/review.yml: want $integrity" >&2
   exit 1
 }
-echo "README.md includes templates/review.yml from $usage_tag"
+echo "the docs include templates/review.yml from $usage_tag"
 '''
 
 [tasks.build]

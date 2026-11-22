@@ -329,6 +329,9 @@ talks to a forge lives here.
 
 ## Documentation site (decided and built 2026-11-22)
 
+- **The release check reads the docs (2026-11-22):** the GitLab includes with tag and integrity live in `docs/*.md`
+  since the README went compact, so `mise run action:version` looks there; the PR that prepares a release updates the
+  tags and hashes in those pages.
 - **Like the core's (the user's choices):** Sphinx with Furo and MyST, sources in `docs/`, built by `mise run
   docs:build` (`docs/build.sh`) into `dist/docs` with `-W`; `docs/requirements.txt` is the core's file (hash-pinned,
   two-week rule), the virtualenv cached under `~/.cache/canned-schedules-companion/docs-venv`; `python = "3.14"` in

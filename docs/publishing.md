@@ -36,8 +36,8 @@ which needs the script's tools (`curl`, `jq`, the AWS CLI, …). One publish run
 
 ```yaml
 include:
-  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.7/templates/publish.yml
-    integrity: sha256-5R6Py7GDsSz9QUtsh9htai2cu6zZ69WX6lBEITNW7r4=
+  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.8/templates/publish.yml
+    integrity: sha256-5woxUGdXNDn9PfqMPiQK3YIQaN5aI6HpS1S4pHGUtKg=
     inputs:
       post-fetch-script: scripts/upload-schedules.sh # a copy of publish/upload-artifactory.sh
 ```
