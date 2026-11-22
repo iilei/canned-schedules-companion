@@ -14,12 +14,12 @@ GitHub Action that runs both.
   any forge; GitHub and GitLab get small wrappers that install the binary and run it.
 - **Commands are `<step> <verb>`.** The verb says whether it writes to a forge:
 
-  | Step          | Local (files only) | Forge                       |
-  | ------------- | ------------------ | --------------------------- |
-  | issue preview | `preview render`   | `preview post`              |
-  | promotion     | `promote prepare`  | `promote open`              |
-  | publishing    | `publish prepare`  | `publish fetch` (read-only) |
-  | housekeeping  | `housekeep check`  | `housekeep retire`          |
+  | Step          | Local (files only) | Forge                           |
+  | ------------- | ------------------ | ------------------------------- |
+  | issue preview | `preview render`   | `preview post`                  |
+  | promotion     | `promote prepare`  | `promote open`                  |
+  | publishing    | `publish prepare`  | `publish fetch`, `publish post` |
+  | housekeeping  | `housekeep check`  | `housekeep retire`              |
 
   `preview render` and `preview post` exist so far. Forge verbs support `--dry-run` and take the forge explicitly
   (`--forge github` or `--forge gitlab`).
@@ -375,8 +375,8 @@ Exit codes: 0 written, 1 no merged merge request for the commit, 2 unusable inpu
 canned-schedules-companion publish prepare --merge-request-file merge-request.json [flags] file...
 ```
 
-**Lays out what a merged merge request publishes** (step 3, after [`publish fetch`](#publish-fetch); the note on the
-merge request and the wrappers come next). It is local: it reads the merged schedule files and `merge-request.json`, and writes into `--out-dir`, which
+**Lays out what a merged merge request publishes** (step 3, after [`publish fetch`](#publish-fetch), before
+[`publish post`](#publish-post); the wrappers come next). It is local: it reads the merged schedule files and `merge-request.json`, and writes into `--out-dir`, which
 must be empty or missing, so nothing stale is published.
 
 - **Always rendered from the file as merged,** with the flags given (the args file of the commit being published).
@@ -471,6 +471,18 @@ plus the evaluation flags of `review render`. Exit codes: 0 laid out, 1 a schedu
 ```
 
 `number`, `created-at` and `merged-at` are required; `review` is `null` when the merge request has no review comment.
+
+## publish post
+
+```sh
+canned-schedules-companion publish post --forge github|gitlab --repo P [flags] dir
+```
+
+**The loud signal:** keeps one note on the merged merge request, read from `dir/manifest.json` (written by `publish
+prepare`), that lists every schedule published without the review vouching for it: the path, why (changed after the
+last review, not in the review, no review comment), the published digest and the reviewed one. When every schedule was
+published as reviewed, it writes nothing. The same note again is left alone. Flags as for `review post`
+(`--author`, `--token-env`, `--api-url`, `--dry-run`); the marker is `<!-- canned-schedules:publish-note -->`.
 
 ## GitLab CI/CD component
 
