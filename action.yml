@@ -13,7 +13,7 @@ inputs:
     required: true
   version:
     description: The canned-schedules-companion release to install. The default is the release this action belongs to.
-    default: "0.3.7"
+    default: "0.3.8"
   issue:
     description: The issue to comment on.
     default: ${{ github.event.issue.number }}

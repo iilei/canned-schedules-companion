@@ -94,8 +94,8 @@ labels takes the Reporter role or more.
 
 ```yaml
 include:
-  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.7/templates/promote.yml
-    integrity: sha256-UmZcbECNMDoh58sRWuTFV4q3l4Xa8isKJ74iDqDdJ+A=
+  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.8/templates/promote.yml
+    integrity: sha256-zRwUZHe+ik+CiAm65DI7sVkmC7EUHBxrkRnUrRBEfXI=
 ```
 
 Inputs: `stage` (`deploy`), `version`, `image`, `approved-label`, `catalog-dir`, `args-file` (read from the

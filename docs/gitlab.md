@@ -21,8 +21,8 @@ inline. GitLab can't start a pipeline from an issue event by itself, so a webhoo
 
    ```yaml
    include:
-     - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.7/templates/issue-preview.yml
-       integrity: sha256-oAkdpOZr/5fW4KWUrt+CFQvE+zSM2SklO/XSJu4hqSs=
+     - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.8/templates/issue-preview.yml
+       integrity: sha256-3p8+KUOosVkPuu3F0/y2EcCOvA/k8z4W3CHe1HzYczU=
    ```
 
    GitLab rejects the file if it doesn't match `integrity`. Inputs go under `inputs:` of the same entry.
@@ -58,8 +58,8 @@ playground checks as the issue preview does), verifies both with GPG against the
 
 ```yaml
 include:
-  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.7/templates/playground.yml
-    integrity: sha256-yGLsukrc4Pp4wSO4HjKwHcfsgI7Ec6RC407sc6suUGM=
+  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.8/templates/playground.yml
+    integrity: sha256-YR1hCjkjf720o0mRhl0n0Ol8mqV5cvAz6hCvMcp8kCM=
     inputs:
       name: Acme schedules
       fork: true
