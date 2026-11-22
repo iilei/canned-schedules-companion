@@ -15,6 +15,7 @@ const (
 	helperUpper    = "toUpper"
 	helperReverse  = "reverseByDotDelim"
 	helperTruncate = "truncate"
+	helperAfter    = "afterLast"
 )
 
 // Variables are the names a template may use, in the order the docs list them. Every one is available in the path
@@ -27,7 +28,7 @@ var Variables = []string{
 }
 
 // Helpers are the functions a placeholder may pipe its value through.
-var Helpers = []string{helperLower, helperUpper, helperReverse, helperTruncate}
+var Helpers = []string{helperLower, helperUpper, helperReverse, helperTruncate, helperAfter}
 
 var errTemplate = errors.New("template")
 
@@ -45,6 +46,7 @@ type part struct {
 
 type helper struct {
 	name string
+	sep  string
 	n    int
 }
 
@@ -155,6 +157,14 @@ func parseHelper(words []string) (helper, error) {
 		}
 
 		return helper{name: name, n: n}, nil
+	case helperAfter:
+		// One quoted separator: the template's braces and pipes, and spaces, can't be part of it.
+		if len(args) != 1 || len(args[0]) < 3 || args[0][0] != '"' || args[0][len(args[0])-1] != '"' ||
+			strings.Contains(args[0][1:len(args[0])-1], `"`) {
+			return helper{}, errors.New(`afterLast takes one quoted separator: afterLast ":"`)
+		}
+
+		return helper{name: name, sep: args[0][1 : len(args[0])-1]}, nil
 	}
 
 	return helper{}, fmt.Errorf("unknown helper %q (known: %s)", name, strings.Join(Helpers, ", "))
@@ -171,6 +181,12 @@ func (h helper) apply(v string) string {
 		slices.Reverse(parts)
 
 		return strings.Join(parts, ".")
+	case helperAfter: // what follows the last separator; the whole value without one, like ${v##*sep}.
+		if i := strings.LastIndex(v, h.sep); i >= 0 {
+			return v[i+len(h.sep):]
+		}
+
+		return v
 	default: // truncate: the first n characters, not bytes.
 		if utf8.RuneCountInString(v) <= h.n {
 			return v
