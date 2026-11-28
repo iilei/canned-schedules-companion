@@ -1,8 +1,11 @@
 # The week as a PNG
 
 `preview render` writes the week as `schedule.svg`. To use it outside the forge, for example on a slide or in a chat
-message, convert it with `rsvg-convert`. Both recipes expect `schedule.svg` in the current folder. `font-ubuntu` provides
-Ubuntu Mono, the SVG's first choice of font, and `ttf-dejavu` provides the `→` that Ubuntu Mono lacks.
+message, convert it with `rsvg-convert`. Both recipes expect `schedule.svg` in the current folder. They install
+`font-ubuntu` for Ubuntu Mono, which every SVG names (newer canned-schedules releases name Noto Sans Mono before it),
+and `ttf-dejavu` for the `→` that Ubuntu Mono lacks. So the PNG looks the same whichever release wrote the SVG. To
+draw it in Noto Sans Mono, as the playground shows it, install `font-noto` (about 9 MiB on Alpine; its Noto Sans Mono has the
+`→`) instead of both.
 
 The SVG decides the theme. `preview render` writes one that follows the viewer, and `rsvg-convert` draws that in light
 colours. For a dark PNG, write the SVG with the
