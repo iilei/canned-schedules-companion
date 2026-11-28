@@ -4,9 +4,9 @@
 # the playground's proposals start) is named after its schedules.
 #
 # The flags come from the args file on the target branch, so a merge request can't loosen its own check. The job
-# needs the CI/CD variable CANNED_SCHEDULES_TOKEN (the issue preview's: a project access token with the api scope;
-# the Developer role, so it may label and rename merge requests). Merge requests from forks run their pipelines in
-# the fork, without that variable, unless the project runs fork pipelines in the parent.
+# needs a project access token with the api scope and the Developer role, so it may label and rename merge requests,
+# in the CI/CD variable CANNED_SCHEDULES_TOKEN or the one token-variable names. Merge requests from forks run their
+# pipelines in the fork, without that variable, unless the project runs fork pipelines in the parent.
 spec:
   description: Reviews merge requests that change the catalog's schedules.
   inputs:
@@ -36,6 +36,10 @@ spec:
     api-url:
       description: The REST API as a job reaches it.
       default: $CI_API_V4_URL
+    token-variable:
+      description: The CI/CD variable with the job's project access token (api scope, the Developer role or more).
+      default: CANNED_SCHEDULES_TOKEN
+      regex: ^[A-Za-z_][A-Za-z0-9_]*$
     dry-run:
       description: Reads the merge request and says what would change, but writes nothing.
       type: boolean
@@ -62,6 +66,7 @@ canned-schedule-review:
     CS_LABEL: $[[ inputs.label ]]
     CS_RETITLE: $[[ inputs.retitle ]]
     CS_API_URL: $[[ inputs.api-url ]]
+    CS_TOKEN_VARIABLE: $[[ inputs.token-variable ]]
     CS_DRY_RUN: $[[ inputs.dry-run ]]
     # canned-schedules' release key, the only one that may sign the download.
     CS_RELEASE_KEY: B645234C9CB8175ECA5D78A5C8447A2252E9E7B6
@@ -74,7 +79,12 @@ canned-schedule-review:
         exit 2
       }
 
-      [ -n "${CANNED_SCHEDULES_TOKEN:-}" ] || fail 'set the CI/CD variable CANNED_SCHEDULES_TOKEN'
+      # The input's regex allows only a variable name, so the eval reads that variable and nothing else.
+      case $CS_TOKEN_VARIABLE in
+        '' | [0-9]* | *[!A-Za-z0-9_]*) fail 'token-variable must name a CI/CD variable' ;;
+      esac
+      eval "cs_token=\${$CS_TOKEN_VARIABLE:-}"
+      [ -n "$cs_token" ] || fail "set the CI/CD variable $CS_TOKEN_VARIABLE"
 
       if ! command -v git >/dev/null || ! command -v curl >/dev/null; then
         apk add --no-cache --quiet git curl
@@ -136,7 +146,7 @@ canned-schedule-review:
       [ "$rc" -le 1 ] || exit "$rc"
 
       set -- --forge gitlab --repo "$CI_PROJECT_ID" --merge-request "$CI_MERGE_REQUEST_IID" --head-sha "$CI_COMMIT_SHA" \
-        --api-url "$CS_API_URL" --token-env CANNED_SCHEDULES_TOKEN
+        --api-url "$CS_API_URL" --token-env "$CS_TOKEN_VARIABLE"
       if [ -n "$CS_LABEL" ]; then set -- "$@" --label "$CS_LABEL"; fi
       if [ "$CS_RETITLE" = true ]; then set -- "$@" --retitle; fi
       if [ "$CS_DRY_RUN" = true ]; then set -- "$@" --dry-run; fi

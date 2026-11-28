@@ -163,8 +163,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: write # Renames the pull request.
-      issues: write # Comments and labels go through the issues API.
+      pull-requests: write # The comment, the label and the title.
     steps:
       - uses: actions/checkout@<commit SHA> # <release tag>
         with:

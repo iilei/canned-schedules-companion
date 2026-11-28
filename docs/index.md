@@ -42,6 +42,7 @@ publish
 
 gitlab
 github
+permissions
 publishing
 gitlab-flow/README
 :::

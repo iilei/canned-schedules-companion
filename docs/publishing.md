@@ -31,7 +31,8 @@ Both need `jq` (installed with `apk` in the components' Alpine image; `curl` too
 version 1. They were run against Artifactory OSS 7.104 and an S3 emulator, and a test runs them with stand-ins for
 `curl` and `aws` on every change.
 
-**GitLab:** `templates/publish.yml` needs the review's `CANNED_SCHEDULES_TOKEN` and runs the script in its `image`,
+**GitLab:** `templates/publish.yml` needs a project access token with the Planner role (`read_api` with `note: false`)
+in `CANNED_SCHEDULES_TOKEN` or the variable `token-variable` names, and runs the script in its `image`,
 which needs the script's tools (`curl`, `jq`, the AWS CLI, …). One publish runs at a time (`resource_group`).
 
 ```yaml
@@ -44,8 +45,8 @@ include:
 
 with the CI/CD variables `ARTIFACTORY_URL`, `ARTIFACTORY_REPO` and `ARTIFACTORY_TOKEN` (masked).
 
-**GitHub:** `publish/action.yml`, with `pull-requests: read` (which pull request a commit came from) and
-`issues: write` (the note):
+**GitHub:** `publish/action.yml`, with `pull-requests: write` (which pull request a commit came from, and the note;
+`issues: write` doesn't let the workflow token comment on a pull request):
 
 ```yaml
 name: schedule publish
@@ -68,8 +69,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: read
-      issues: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@<commit SHA> # <release tag>
         with:
@@ -96,7 +96,7 @@ jobs:
 | `note`              | keep the note on the merge request for schedules published without review                      | `true`                                                 |
 | `dry-run`           | read and lay out, but run no script and post no note                                           | `false`                                                |
 
-GitLab also takes `stage` (default `deploy`), `image` and `api-url`; GitHub `token` and `comment-author`, and has
+GitLab also takes `stage` (default `deploy`), `image`, `api-url` and `token-variable`; GitHub `token` and `comment-author`, and has
 the output `out-dir`. Tested end to end on a local GitLab 19.4.1 against Artifactory OSS: a reviewed merge request
 publishes with `reviewed=true` and no note; one changed after its review publishes with `reviewed=false` and the note;
 a direct push publishes nothing. The action ran the same way on the demo repo

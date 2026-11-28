@@ -106,14 +106,14 @@ talks to a forge lives here.
     The binary's path is looked up from a work directory, so mise never reads a `mise.toml` of the checkout, and runs
     in the checkout (files keep their repository paths). The comment also goes to the job summary; a pull request
     from a fork (head repo ≠ repository) stops before posting, since its token is read-only. `pull_request_target` is
-    deliberately unsupported. Permissions: `contents: read`, `pull-requests: write` (title), `issues: write`.
+    deliberately unsupported. Permissions: `contents: read`, `pull-requests: write` (see "Minimal token scopes").
   - `playground/action.yml` (2026-11-21): mise installs the companion; the site zip is fetched and verified with GPG
     as in `templates/playground.yml`; `playground build --forge github`, then `upload-pages-artifact`. The caller
     deploys with `deploy-pages` in a job of its own (only a job can name the `github-pages` environment). Linux only.
     Live on `canned-schedules-demo` (Pages source "GitHub Actions", enabled 2026-11-21) from the branch commit.
   - `templates/review.yml`: merge request pipelines that change `catalog-dir/*.canned-schedule.md`, `GIT_DEPTH: 0`,
     files from `git diff --diff-filter=ACMR` against `$CI_MERGE_REQUEST_DIFF_BASE_SHA`, flags from the args file at
-    that base commit (an MR can't loosen its own check). Needs `CANNED_SCHEDULES_TOKEN` with the Developer role.
+    that base commit (an MR can't loosen its own check). Needs a Developer token (see "Minimal token scopes").
     Fork MRs run in the fork without the variable.
   - Checked live on the local GitLab (`root/canned-schedules-demo` !1, run from the command line until a release has
     it): note created, label added, "Add new file" renamed to "Schedule: Night Shift", a second run up to date, a
@@ -146,7 +146,7 @@ talks to a forge lives here.
     request opened with the workflow token starts no workflows (no review run; the promotion checked the schedule).
     `templates/promote.yml` runs on the issue preview's webhook pipeline and acts only when the event's
     `changes.labels` added the label; it reads the issue's current text through the API, the args file from the
-    checkout, and needs `CANNED_SCHEDULES_TOKEN` with the Developer role.
+    checkout, and needs a Developer token (see "Minimal token scopes").
 - **`publish fetch` (implemented 2026-11-22, step 3's forge part, read-only):** `forge.Merged` from each client's
   `MergedRequest(repo, sha)`: GitLab `repository/commits/:sha/merge_requests`, matching a merged one whose
   `merge_commit_sha`, `squash_commit_sha` or head `sha` (fast-forward) is the commit, `merge_user` before the
@@ -245,8 +245,29 @@ talks to a forge lives here.
   byte and shown in the browser, and quick actions (`/close`, `/title`, …) inside the comment's tilde fences stay inert, while the same lines
   outside a fence do fire. So user text must only ever reach a note inside a fence.
   **Token: a project access token with `api` and the Planner role** (tested Guest to Maintainer): Guest gets a 404 on
-  confidential issues, every role can post on locked and closed issues, and `read_api` only allows `--dry-run`. A
+  confidential issues and, since the label (`v0.2.0`), a 403 on labels; every role can post on locked and closed issues, and `read_api` only allows `--dry-run`. A
   new project access token can answer 404 for a few seconds, until GitLab has applied its membership.
+- **Minimal token scopes (decided and tested 2026-11-28; the core's "Still open" item):** `docs/permissions.md` holds
+  the tables. Tested on GitLab CE 19.4.1 with one project access token per role against every call the components
+  make (private project), and on GitHub with a throwaway workflow on the demo repo that called every endpoint once per
+  permission set with bodies GitHub refuses (403 = missing, 422 = present; the `X-Accepted-GitHub-Permissions`
+  header only comes back to app tokens such as the workflow token, not to `gh auth token`).
+  - **GitLab roles:** issue preview Planner, publishing Planner (`read_api` with `note: false`), review and promotion
+    Developer (Planner and Reporter get 403 on labelling or renaming a merge request, pushing a branch and opening a
+    merge request). Guest can't label (403) or see merge requests in a private project. Planner labels issues, so it
+    approves promotions (the docs said Reporter).
+  - **`token-variable` input on all four token components** (default `CANNED_SCHEDULES_TOKEN`, regex
+    `^[A-Za-z_][A-Za-z0-9_]*$`, re-checked in the script before an `eval` reads the variable), the user's choice
+    over documenting one shared token: the issue preview (anyone's issue text) and publishing (the post-fetch script
+    sees the job's variables) can then run on a Planner token while review and promotion use a Developer one. Each
+    token is its own bot user, so moving a step to another token gives its issues a second note. Checked live
+    (review with `DEV_TOKEN`, preview with `PLANNER_TOKEN`; a bad name fails `ci/lint`).
+  - **GitHub:** a pull request's comments and labels go through the issues API but need `pull-requests: write`;
+    `issues: write` alone is 403 there (and `pull-requests: write` doesn't cover issues). So review and publishing are
+    `contents: read` + `pull-requests: write` (publishing's documented `pull-requests: read` + `issues: write` could
+    never post its note), the issue preview `issues: write`, promotion `contents: write`, `pull-requests: write`,
+    `issues: write`. Deleting a duplicate pull request comment wasn't exercised (GitHub names the same permissions as
+    for editing, which passed).
 - **Playground link, opt-in only (decided 2026-11-08):** previews are CI's job, so nobody has to wonder where a
   proposal's data lands; the public Pages site is never linked by default. A team that hosts the preflight page
   itself opts in with `preview render --fiddle-link-base-uri <https URI>`: `comment.md` then ends with

@@ -5,8 +5,9 @@
 `templates/issue-preview.yml` checks an issue that proposes a schedule and keeps one note on it up to date, with the week shown
 inline. GitLab can't start a pipeline from an issue event by itself, so a webhook calls a pipeline trigger.
 
-1. **Create a project access token** in the project that holds the issues, with the `api` scope and the Planner role.
-2. **Store it** as the CI/CD variable `CANNED_SCHEDULES_TOKEN`, masked. Before it expires, **rotate** it and store the
+1. **Create a project access token** in the project that holds the issues, with the `api` scope and the Planner role
+   (Guest can't set labels; [Tokens and permissions](permissions.md) lists every step's role).
+2. **Store it** as the CI/CD variable `CANNED_SCHEDULES_TOKEN`, masked (the input `token-variable` names another). Before it expires, **rotate** it and store the
    new value. Rotation keeps the token's bot user, so the bot goes on updating its notes. A newly created token is a
    new user: it can't edit the old bot's notes, so each issue would get a second note.
 3. **Create a pipeline trigger token** under Settings > CI/CD > Pipeline trigger tokens.
@@ -36,17 +37,18 @@ as GitLab stores it, named after its origin, for example `acme-catalog-issue-12.
 
 [The GitLab flow in screenshots](gitlab-flow/README.md) shows each step, from the new issue to the updated note.
 
-| Input                  | Meaning                                                                          | Default          |
-| ---------------------- | -------------------------------------------------------------------------------- | ---------------- |
-| `stage`                | the job's stage                                                                  | `test`           |
-| `version`              | the release to install; its signature and checksum are verified                  | this file's      |
-| `image`                | the job's image; one with the binary, `curl` and `jq` skips the download         | `alpine:3.22`    |
-| `label`                | added when the schedule is valid, removed when not; empty leaves labels alone    | `Schedule`       |
-| `api-url`              | the REST API as a job reaches it                                                 | `$CI_API_V4_URL` |
-| `args`                 | evaluation flags, one argument per line, as in `canned-schedules.args`           |                  |
-| `fiddle-link-base-uri` | a preflight page you host, linked from the note                                  | no link          |
-| `expire-in`            | how long the job's files are kept                                                | `30 days`        |
-| `dry-run`              | says what would change, but writes nothing                                       | `false`          |
+| Input                  | Meaning                                                                       | Default                  |
+| ---------------------- | ----------------------------------------------------------------------------- | ------------------------ |
+| `stage`                | the job's stage                                                               | `test`                   |
+| `version`              | the release to install; its signature and checksum are verified               | this file's              |
+| `image`                | the job's image; one with the binary, `curl` and `jq` skips the download      | `alpine:3.22`            |
+| `label`                | added when the schedule is valid, removed when not; empty leaves labels alone | `Schedule`               |
+| `api-url`              | the REST API as a job reaches it                                              | `$CI_API_V4_URL`         |
+| `token-variable`       | the CI/CD variable with the project access token                              | `CANNED_SCHEDULES_TOKEN` |
+| `args`                 | evaluation flags, one argument per line, as in `canned-schedules.args`        |                          |
+| `fiddle-link-base-uri` | a preflight page you host, linked from the note                               | no link                  |
+| `expire-in`            | how long the job's files are kept                                             | `30 days`                |
+| `dry-run`              | says what would change, but writes nothing                                    | `false`                  |
 
 ## GitLab Pages playground
 

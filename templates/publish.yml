@@ -5,8 +5,8 @@
 # commit elsewhere), and keeps a note on the merge request for every schedule published without its reviewed digest
 # (publish post).
 #
-# The job needs the CI/CD variable CANNED_SCHEDULES_TOKEN (the review's: a project access token with the api scope;
-# read_api is enough with note false). The post-fetch script runs in the job's image with the job's variables, so the
+# The job needs a project access token with the Planner role and the api scope (read_api is enough with note false) in
+# the CI/CD variable CANNED_SCHEDULES_TOKEN or the one token-variable names. The post-fetch script runs in the job's image with the job's variables, so the
 # upload's secrets are the team's CI/CD variables; it should exit non-zero when the upload fails. Protect the default
 # branch: a commit that no merged merge request produced fails the job, and nothing is published.
 spec:
@@ -48,6 +48,10 @@ spec:
     api-url:
       description: The REST API as a job reaches it.
       default: $CI_API_V4_URL
+    token-variable:
+      description: The CI/CD variable with the job's project access token (api scope, the Planner role or more).
+      default: CANNED_SCHEDULES_TOKEN
+      regex: ^[A-Za-z_][A-Za-z0-9_]*$
     dry-run:
       description: Reads and lays out everything, but runs no post-fetch script and posts no note.
       type: boolean
@@ -85,6 +89,7 @@ canned-schedule-publish:
       expand: false
     CS_NOTE: $[[ inputs.note ]]
     CS_API_URL: $[[ inputs.api-url ]]
+    CS_TOKEN_VARIABLE: $[[ inputs.token-variable ]]
     CS_DRY_RUN: $[[ inputs.dry-run ]]
     # canned-schedules' release key, the only one that may sign the download.
     CS_RELEASE_KEY: B645234C9CB8175ECA5D78A5C8447A2252E9E7B6
@@ -97,7 +102,12 @@ canned-schedule-publish:
         exit 2
       }
 
-      [ -n "${CANNED_SCHEDULES_TOKEN:-}" ] || fail 'set the CI/CD variable CANNED_SCHEDULES_TOKEN'
+      # The input's regex allows only a variable name, so the eval reads that variable and nothing else.
+      case $CS_TOKEN_VARIABLE in
+        '' | [0-9]* | *[!A-Za-z0-9_]*) fail 'token-variable must name a CI/CD variable' ;;
+      esac
+      eval "cs_token=\${$CS_TOKEN_VARIABLE:-}"
+      [ -n "$cs_token" ] || fail "set the CI/CD variable $CS_TOKEN_VARIABLE"
 
       if ! command -v git >/dev/null || ! command -v curl >/dev/null; then
         apk add --no-cache --quiet git curl
@@ -147,7 +157,7 @@ canned-schedule-publish:
       # this commit (a direct push), so nothing is published.
       rc=0
       canned-schedules-companion publish fetch --forge gitlab --repo "$CI_PROJECT_ID" --commit "$CI_COMMIT_SHA" \
-        --api-url "$CS_API_URL" --token-env CANNED_SCHEDULES_TOKEN --out-file "$work/merge-request.json" || rc=$?
+        --api-url "$CS_API_URL" --token-env "$CS_TOKEN_VARIABLE" --out-file "$work/merge-request.json" || rc=$?
       [ "$rc" -ne 1 ] || fail 'no merged merge request produced this commit: nothing is published'
       [ "$rc" -eq 0 ] || exit "$rc"
 
@@ -181,7 +191,7 @@ canned-schedule-publish:
       fi
 
       if [ "$CS_NOTE" = true ]; then
-        set -- --forge gitlab --repo "$CI_PROJECT_ID" --api-url "$CS_API_URL" --token-env CANNED_SCHEDULES_TOKEN
+        set -- --forge gitlab --repo "$CI_PROJECT_ID" --api-url "$CS_API_URL" --token-env "$CS_TOKEN_VARIABLE"
         if [ "$CS_DRY_RUN" = true ]; then set -- "$@" --dry-run; fi
         canned-schedules-companion publish post "$@" "$out_dir"
       fi
