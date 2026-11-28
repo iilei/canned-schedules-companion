@@ -358,6 +358,12 @@ talks to a forge lives here.
   two-week rule), the virtualenv cached under `~/.cache/canned-schedules-companion/docs-venv`; `python = "3.14"` in
   `mise.toml`. No Sphinx kit: these docs show no schedules. `check.yml` builds it; `pages.yml` publishes it to
   <https://iilei.github.io/canned-schedules-companion/> (Pages source "GitHub Actions", a one-time repo setting).
+- **Fonts (the user's choice, 2026-11-28):** Source Serif 4 Black (900 only) for headings and the sidebar brand, Inter
+  (variable) for text, Noto Sans Mono (variable; "Noto Mono" is the discontinued predecessor) for code. Served from
+  `docs/_static/fonts/`, never a font CDN: the Latin and Latin Extended woff2 subsets of Fontsource's npm packages
+  (`@fontsource-variable/inter` 5.3.0, `@fontsource/source-serif-4` 5.3.1, `@fontsource-variable/noto-sans-mono`
+  5.3.0), their OFL licences beside them. `docs/_static/fonts.css` holds the `@font-face` rules; `conf.py` sets Furo's
+  `font-stack`, `font-stack--headings` and `font-stack--monospace` with system fallbacks.
 - **The README** keeps the pitch, the steps with their commands and a map of the docs; the sections moved verbatim to
   pages (one per step, `gitlab.md`, `github.md`, `publishing.md`, `json.md`, `png.md`, `development.md`), headings up
   one level where a page holds one section, anchors rewritten to the page that holds them, repo paths as GitHub URLs.
