@@ -2,11 +2,12 @@
 # schedule, the job checks the issue's text with the catalog's flags, commits it as catalog-dir/<file name of its
 # title> to the branch canned-schedules/issue-<N> and opens one merge request that closes the issue. The text goes in
 # as the author wrote it. An issue without a valid schedule gets the label taken back. Setting labels takes the
-# Reporter role or more, so that is who approves.
+# Planner role or more, so that is who approves.
 #
 # It runs in the pipeline the issue preview's webhook starts (an issue event with TRIGGER_PAYLOAD) and acts only when
-# that event added the approval label. The job needs the CI/CD variable CANNED_SCHEDULES_TOKEN (the issue preview's: a
-# project access token with the api scope and the Developer role, so it may push a branch and open merge requests).
+# that event added the approval label. The job needs a project access token with the api scope and the Developer
+# role, so it may push a branch and open merge requests, in the CI/CD variable CANNED_SCHEDULES_TOKEN or the one
+# token-variable names.
 # The merge request runs the merge request review like any other.
 spec:
   description: Opens a merge request that adds an approved issue's schedule to the catalog.
@@ -39,6 +40,10 @@ spec:
     api-url:
       description: The REST API as a job reaches it.
       default: $CI_API_V4_URL
+    token-variable:
+      description: The CI/CD variable with the job's project access token (api scope, the Developer role or more).
+      default: CANNED_SCHEDULES_TOKEN
+      regex: ^[A-Za-z_][A-Za-z0-9_]*$
     dry-run:
       description: Reads the project and says what would change, but writes nothing.
       type: boolean
@@ -64,6 +69,7 @@ canned-schedule-promotion:
       value: $[[ inputs.branch-prefix ]]
       expand: false
     CS_API_URL: $[[ inputs.api-url ]]
+    CS_TOKEN_VARIABLE: $[[ inputs.token-variable ]]
     CS_DRY_RUN: $[[ inputs.dry-run ]]
     # canned-schedules' release key, the only one that may sign the download.
     CS_RELEASE_KEY: B645234C9CB8175ECA5D78A5C8447A2252E9E7B6
@@ -76,7 +82,12 @@ canned-schedule-promotion:
         exit 2
       }
 
-      [ -n "${CANNED_SCHEDULES_TOKEN:-}" ] || fail 'set the CI/CD variable CANNED_SCHEDULES_TOKEN'
+      # The input's regex allows only a variable name, so the eval reads that variable and nothing else.
+      case $CS_TOKEN_VARIABLE in
+        '' | [0-9]* | *[!A-Za-z0-9_]*) fail 'token-variable must name a CI/CD variable' ;;
+      esac
+      eval "cs_token=\${$CS_TOKEN_VARIABLE:-}"
+      [ -n "$cs_token" ] || fail "set the CI/CD variable $CS_TOKEN_VARIABLE"
 
       if ! command -v curl >/dev/null || ! command -v jq >/dev/null; then
         apk add --no-cache --quiet curl jq
@@ -98,7 +109,7 @@ canned-schedule-promotion:
 
       # The text as GitLab stores it now, not as the event carried it.
       work_dir=$(mktemp -d)
-      printf 'header = "PRIVATE-TOKEN: %s"\n' "$CANNED_SCHEDULES_TOKEN" |
+      printf 'header = "PRIVATE-TOKEN: %s"\n' "$cs_token" |
         curl --config - --fail --silent --show-error --max-time 30 \
           "$CS_API_URL/projects/$CI_PROJECT_ID/issues/$iid" > "$work_dir/issue.json"
       jq -j '.description // ""' "$work_dir/issue.json" > "$work_dir/issue-$iid.md"
@@ -150,7 +161,7 @@ canned-schedule-promotion:
 
       set -- --forge gitlab --repo "$CI_PROJECT_ID" --issue "$iid" --base-branch "$CS_BASE_BRANCH" \
         --branch-prefix "$CS_BRANCH_PREFIX" --approved-label "$CS_APPROVED_LABEL" --api-url "$CS_API_URL" \
-        --token-env CANNED_SCHEDULES_TOKEN
+        --token-env "$CS_TOKEN_VARIABLE"
       if [ "$CS_DRY_RUN" = true ]; then set -- "$@" --dry-run; fi
       canned-schedules-companion promote open "$@" "$out_dir"
   artifacts:

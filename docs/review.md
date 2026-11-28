@@ -42,8 +42,9 @@ default `--author` is `github-actions[bot]`, on GitLab the token's user.
 | `--dry-run`       | read and say what would change, but write nothing                                |
 
 `templates/review.yml` runs both in merge request pipelines that touch `catalog-dir/*.canned-schedule.md`. It reads
-the flags from the args file **on the target branch**, so a merge request can't loosen its own check, and needs the
-issue preview's `CANNED_SCHEDULES_TOKEN`, with the Developer role to label and rename merge requests.
+the flags from the args file **on the target branch**, so a merge request can't loosen its own check, and needs a
+project access token with the Developer role to label and rename merge requests (Planner and Reporter get 403), in
+`CANNED_SCHEDULES_TOKEN` or the variable `token-variable` names.
 
 ```yaml
 include:

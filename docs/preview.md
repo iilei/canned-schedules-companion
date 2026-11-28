@@ -105,8 +105,8 @@ the note. The upload is named `schedule-<issue>-<hash>.svg`, with the first 12 c
 another job can tell which week a note shows. `--repo` is the project's path (`group/subgroup/project`) or numeric ID. Comments count as the
 step's own when the token's user wrote them, unless `--author` says otherwise.
 
-Use a project access token with the `api` scope and the **Planner** role. Guest also works, except on confidential
-issues, which it can't see. With `read_api`, only `--dry-run` works. `CI_JOB_TOKEN` can neither write notes nor upload
+Use a project access token with the `api` scope and the **Planner** role. Guest can write the note but can't set the
+label or see confidential issues. With `read_api`, only `--dry-run` works. `CI_JOB_TOKEN` can neither write notes nor upload
 files. Every changed note uploads the week again, and earlier uploads stay in the project.
 
 ```sh

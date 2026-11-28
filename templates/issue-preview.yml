@@ -1,8 +1,9 @@
 # Checks an issue that proposes a schedule and keeps one note on it up to date, with the week shown inline.
 #
 # GitLab can't start a pipeline from an issue event by itself: an issue webhook calls a pipeline trigger URL, and this
-# job reads the event from TRIGGER_PAYLOAD. The README lists the setup. The job needs the CI/CD variable
-# CANNED_SCHEDULES_TOKEN: a project access token with the api scope and the Planner role.
+# job reads the event from TRIGGER_PAYLOAD. The README lists the setup. The job needs a project access token with the
+# api scope and the Planner role (Guest can't set labels) in the CI/CD variable CANNED_SCHEDULES_TOKEN, or in the
+# variable token-variable names.
 spec:
   description: Checks issues that propose schedules and keeps one note on each up to date.
   inputs:
@@ -22,6 +23,10 @@ spec:
     api-url:
       description: The REST API as a job reaches it.
       default: $CI_API_V4_URL
+    token-variable:
+      description: The CI/CD variable with the job's project access token (api scope, the Planner role or more).
+      default: CANNED_SCHEDULES_TOKEN
+      regex: ^[A-Za-z_][A-Za-z0-9_]*$
     args:
       description: Evaluation flags, one argument per line, as in canned-schedules.args.
       default: ""
@@ -49,6 +54,7 @@ canned-schedule-preview:
     CS_VERSION: $[[ inputs.version ]]
     CS_LABEL: $[[ inputs.label ]]
     CS_API_URL: $[[ inputs.api-url ]]
+    CS_TOKEN_VARIABLE: $[[ inputs.token-variable ]]
     CS_DRY_RUN: $[[ inputs.dry-run ]]
     CS_ARGS:
       value: $[[ inputs.args ]]
@@ -67,7 +73,12 @@ canned-schedule-preview:
         exit 2
       }
 
-      [ -n "${CANNED_SCHEDULES_TOKEN:-}" ] || fail 'set the CI/CD variable CANNED_SCHEDULES_TOKEN'
+      # The input's regex allows only a variable name, so the eval reads that variable and nothing else.
+      case $CS_TOKEN_VARIABLE in
+        '' | [0-9]* | *[!A-Za-z0-9_]*) fail 'token-variable must name a CI/CD variable' ;;
+      esac
+      eval "cs_token=\${$CS_TOKEN_VARIABLE:-}"
+      [ -n "$cs_token" ] || fail "set the CI/CD variable $CS_TOKEN_VARIABLE"
 
       # The event names the issue. Everything else is read from the API, so a forged payload can't supply the text.
       if ! command -v curl >/dev/null || ! command -v jq >/dev/null; then
@@ -99,7 +110,7 @@ canned-schedule-preview:
       esac
 
       api_get() {
-        printf 'header = "PRIVATE-TOKEN: %s"\n' "$CANNED_SCHEDULES_TOKEN" |
+        printf 'header = "PRIVATE-TOKEN: %s"\n' "$cs_token" |
           curl --config - --fail --silent --show-error --max-time 30 "$CS_API_URL/projects/$CI_PROJECT_ID/issues/$iid"
       }
 
@@ -174,7 +185,7 @@ canned-schedule-preview:
       cp "$work_dir/request.md" "$out_dir/$(printf '%s' "$CI_PROJECT_PATH" | tr '/' '-')-$kind-$iid.md"
 
       set -- --forge gitlab --repo "$CI_PROJECT_ID" --issue "$iid" --api-url "$CS_API_URL" \
-        --token-env CANNED_SCHEDULES_TOKEN
+        --token-env "$CS_TOKEN_VARIABLE"
       case $CI_JOB_URL in
         https://*) set -- "$@" --link "All files=$CI_JOB_URL/artifacts/browse" ;;
       esac

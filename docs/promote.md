@@ -88,9 +88,10 @@ jobs:
 Outputs: `valid` and `out-dir`.
 
 **On GitLab,** `templates/promote.yml` runs in the pipeline the issue preview's webhook starts, and acts only when the
-event added the approval label. It needs the issue preview's `CANNED_SCHEDULES_TOKEN` with the Developer role (to
-push the branch and open the merge request); the merge request runs the merge request review like any other. Setting
-labels takes the Reporter role or more.
+event added the approval label. It needs a project access token with the Developer role (to push the branch and open
+the merge request; Planner and Reporter get 403) in `CANNED_SCHEDULES_TOKEN`, or the variable `token-variable` names;
+the merge request runs the merge request review like any other. Setting labels takes the Planner role or more, so
+that is who approves.
 
 ```yaml
 include:

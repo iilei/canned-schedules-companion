@@ -5,7 +5,8 @@ branding:
   color: green
 
 # The caller runs it on pull_request (paths: the catalog's *.canned-schedule.md files), checks out with fetch-depth 0,
-# and grants contents: read, pull-requests: write and issues: write (comments and labels go through the issues API).
+# and grants contents: read and pull-requests: write (the title, and the comment and labels the issues API takes for a
+# pull request; issues: write alone is refused for those).
 # The flags come from the args file on the base branch, so a pull request can't loosen its own check. Pull requests
 # from forks get a read-only token: the review then goes to the job summary only. Inputs reach the shell only through
 # environment variables, never through ${{ }} inside a script.

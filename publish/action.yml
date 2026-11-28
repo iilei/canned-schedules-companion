@@ -5,8 +5,8 @@ branding:
   color: green
 
 # The caller runs it on push to the default branch (paths: the catalog's *.canned-schedule.md files), checks out with
-# fetch-depth 0, and grants contents: read, pull-requests: read and issues: write (the note goes through the issues
-# API). It finds the pull request the pushed commit came from and the digests its review vouched for, renders every
+# fetch-depth 0, and grants contents: read and pull-requests: write (which pull request a commit came from, and the note:
+# the issues API takes a pull request's comments only with pull-requests: write, issues: write is refused). It finds the pull request the pushed commit came from and the digests its review vouched for, renders every
 # changed schedule from the file as merged with the args file of that commit, lays out the files, provenance, metadata
 # and manifest, runs the post-fetch script with the output directory, and keeps a note on the pull request for every
 # schedule published without its reviewed digest. The post-fetch script's secrets go in the env of the step that uses
