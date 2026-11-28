@@ -99,8 +99,8 @@ that is who approves.
 
 ```yaml
 include:
-  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.9/templates/promote.yml
-    integrity: sha256-Q7+mC1TWFVw+Xf4ss0y/qo0xV9ZRFIRer5x4ERU866Y=
+  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.10/templates/promote.yml
+    integrity: sha256-g646HUWbj727xwmvcAJE6zqYBRR4l2sCyG90UngrCZ4=
 ```
 
 Inputs: `stage` (`deploy`), `version`, `image`, `approved-label`, `catalog-dir`, `args-file` (read from the
