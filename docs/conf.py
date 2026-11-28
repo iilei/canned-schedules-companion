@@ -38,6 +38,7 @@ html_theme_options = {
     },
 }
 html_static_path = ["_static"]
+templates_path = ["_templates"]  # base.html: font preloads
 html_css_files = ["fonts.css", "theme.css"]
 # Both from the a11y syntax highlighting project (Furo's default dark style, native, is unrelated to its light one).
 pygments_style = "a11y-light"

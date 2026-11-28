@@ -1,7 +1,8 @@
 # playground build
 
 ```sh
-canned-schedules-companion playground build --site-zip canned-schedules-site_<version>.zip \
+canned-schedules-companion playground build \
+  --site-zip canned-schedules-site_<version>.zip \
   --forge github|gitlab --project OWNER/REPO --branch main [flags] public
 ```
 

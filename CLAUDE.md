@@ -370,6 +370,14 @@ talks to a forge lives here.
   `docs/_static/theme.css` (current page, the playground's focus ring). Everything else stays Furo's. Pygments
   `a11y-light` and `a11y-dark`, one project for both (Furo's dark default, `native`, is unrelated). The playground
   in turn took Noto Sans Mono for its code (core CLAUDE.md, "Fonts"); its colours stay as they are.
+- **No flash of the headline font (2026-11-28):** `docs/_templates/base.html` extends Furo's `base.html` and preloads
+  the two fonts every page uses (Source Serif 4 Latin 900, Inter Latin normal) in the `linktags` block, which comes
+  before the stylesheets; Source Serif 4 has `font-display: block` (headings wait briefly rather than jump), the rest
+  `swap`. GitHub Pages fixes `Cache-Control: max-age=600` with an ETag; later visits revalidate with a 304.
+- **Code blocks wrap at 90 characters where possible (the user's rule, 2026-11-28):** commands continue with a
+  trailing backslash and two spaces of indent, separate commands get a blank line between them, YAML comments wrap
+  onto a second comment line, long expressions fold with `>-`, JSON objects split by key. Left long: URLs, including
+  the GitLab includes (`action:version` greps those lines), and the image digest in `png.md`.
 - **The README** keeps the pitch, the steps with their commands and a map of the docs; the sections moved verbatim to
   pages (one per step, `gitlab.md`, `github.md`, `publishing.md`, `json.md`, `png.md`, `development.md`), headings up
   one level where a page holds one section, anchors rewritten to the page that holds them, repo paths as GitHub URLs.

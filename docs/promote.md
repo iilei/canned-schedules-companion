@@ -1,8 +1,11 @@
 # promote prepare / promote open
 
 ```sh
-canned-schedules-companion promote prepare [flags] --catalog-dir schedules --out-dir dir issue.md
-canned-schedules-companion promote open --forge github|gitlab --repo P --issue N --base-branch main [flags] dir
+canned-schedules-companion promote prepare [flags] --catalog-dir schedules \
+  --out-dir dir issue.md
+
+canned-schedules-companion promote open --forge github|gitlab --repo P --issue N \
+  --base-branch main [flags] dir
 ```
 
 **Promotes an approved issue to the catalog:** someone with the right to set labels adds the approval label
@@ -62,7 +65,8 @@ jobs:
       - uses: actions/checkout@<commit SHA> # <release tag>
         with:
           persist-credentials: false
-      # The body is untrusted: it reaches the shell only through an environment variable and a file.
+      # The body is untrusted: it reaches the shell only through an environment variable
+      # and a file.
       - name: Write the issue body to a file
         env:
           BODY: ${{ github.event.issue.body }}

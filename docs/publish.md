@@ -3,7 +3,8 @@
 ## publish fetch
 
 ```sh
-canned-schedules-companion publish fetch --forge github|gitlab --repo P --commit SHA [flags]
+canned-schedules-companion publish fetch --forge github|gitlab --repo P \
+  --commit SHA [flags]
 ```
 
 **Finds the merge request a pushed commit came from** (a pull request on GitHub) and writes it, with the digests its
@@ -31,7 +32,8 @@ Exit codes: 0 written, 1 no merged merge request for the commit, 2 unusable inpu
 ## publish prepare
 
 ```sh
-canned-schedules-companion publish prepare --merge-request-file merge-request.json [flags] file...
+canned-schedules-companion publish prepare \
+  --merge-request-file merge-request.json [flags] file...
 ```
 
 **Lays out what a merged merge request publishes** (step 3, after [`publish fetch`](#publish-fetch), before
@@ -108,9 +110,12 @@ plus the evaluation flags of `review render`. Exit codes: 0 laid out, 1 a schedu
 ```json
 {
   "merge-request": {
-    "forge": "gitlab", "host": "gitlab.example.com", "project": "ops/catalog", "number": 42,
-    "url": "https://gitlab.example.com/ops/catalog/-/merge_requests/42", "title": "Schedule: Night Shift",
-    "author": "ana", "merged-by": "jo", "created-at": "2026-11-20T09:15:00Z", "merged-at": "2026-11-22T14:30:00Z",
+    "forge": "gitlab", "host": "gitlab.example.com", "project": "ops/catalog",
+    "number": 42,
+    "url": "https://gitlab.example.com/ops/catalog/-/merge_requests/42",
+    "title": "Schedule: Night Shift",
+    "author": "ana", "merged-by": "jo",
+    "created-at": "2026-11-20T09:15:00Z", "merged-at": "2026-11-22T14:30:00Z",
     "target-branch": "main", "merge-commit": "4c202b5"
   },
   "review": {

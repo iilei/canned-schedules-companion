@@ -1,0 +1,8 @@
+{#- Furo's base.html, plus preloads for the two fonts every page uses: the browser fetches them with the stylesheets
+    instead of after parsing fonts.css, so the first paint usually has them. linktags comes before the stylesheets. -#}
+{%- extends "!base.html" -%}
+{%- block linktags -%}
+    <link rel="preload" href="{{ pathto('_static/fonts/source-serif-4-latin-900-normal.woff2', 1) }}" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="{{ pathto('_static/fonts/inter-latin-wght-normal.woff2', 1) }}" as="font" type="font/woff2" crossorigin>
+    {{- super() }}
+{%- endblock linktags -%}
