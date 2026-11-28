@@ -1,0 +1,12 @@
+/* Accents in the playground's colours; the values are Furo variables set in conf.py, light and dark. */
+
+/* The current page in the sidebar, in violet like the table of contents' active entry. */
+.sidebar-tree .current-page > .reference {
+  color: var(--color-accent-current);
+}
+
+/* The playground's focus ring. */
+:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
