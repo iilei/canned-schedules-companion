@@ -48,8 +48,8 @@ project access token with the Developer role to label and rename merge requests 
 
 ```yaml
 include:
-  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.8/templates/review.yml
-    integrity: sha256-unRqeZ46KLQDoXT1DTNSiV4C6fpSfI7cyIjaE5bQpus=
+  - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.9/templates/review.yml
+    integrity: sha256-BOJG2TVIe7jA/+tKbcVmyy96ejwbkNDO/MOU106a914=
 ```
 
 Merge requests from forks run their pipelines in the fork, where the variable isn't set; let the project run fork
