@@ -364,6 +364,12 @@ talks to a forge lives here.
   (`@fontsource-variable/inter` 5.3.0, `@fontsource/source-serif-4` 5.3.1, `@fontsource-variable/noto-sans-mono`
   5.3.0), their OFL licences beside them. `docs/_static/fonts.css` holds the `@font-face` rules; `conf.py` sets Furo's
   `font-stack`, `font-stack--headings` and `font-stack--monospace` with system fallbacks.
+- **Accents and highlighting (the user's choices, 2026-11-28):** the playground's teal (`#0b7a68` / `#5ad1b8`) for
+  links, the sidebar and the search highlight, its violet (`#8250df` / `#c4a5ff`) for visited links, the hover
+  underline, the current page and "important" admonitions: Furo variables in `conf.py`, two rules in
+  `docs/_static/theme.css` (current page, the playground's focus ring). Everything else stays Furo's. Pygments
+  `a11y-light` and `a11y-dark`, one project for both (Furo's dark default, `native`, is unrelated). The playground
+  in turn took Noto Sans Mono for its code (core CLAUDE.md, "Fonts"); its colours stay as they are.
 - **The README** keeps the pitch, the steps with their commands and a map of the docs; the sections moved verbatim to
   pages (one per step, `gitlab.md`, `github.md`, `publishing.md`, `json.md`, `png.md`, `development.md`), headings up
   one level where a page holds one section, anchors rewritten to the page that holds them, repo paths as GitHub URLs.
