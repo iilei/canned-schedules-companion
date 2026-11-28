@@ -10,3 +10,9 @@
   outline: 2px solid var(--color-brand-primary);
   outline-offset: 2px;
 }
+
+/* Flags and inputs in a table's first column stay on one line (`--site-zip file`): no break inside a code span.
+   A cell with several spans (publish.md's template variables) can still wrap between them. */
+td:first-child code.literal {
+  white-space: nowrap;
+}
