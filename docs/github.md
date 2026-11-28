@@ -23,15 +23,19 @@ concurrency:
 
 jobs:
   preview:
-    # A schedule directive in the body (contains() ignores case), or the label the action keeps up to date.
-    if: contains(github.event.issue.body, '[!SCHEDULE') || contains(github.event.issue.labels.*.name, 'Schedule')
+    # A schedule directive in the body (contains() ignores case), or the label the action
+    # keeps up to date.
+    if: >-
+      contains(github.event.issue.body, '[!SCHEDULE') ||
+      contains(github.event.issue.labels.*.name, 'Schedule')
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: read
       issues: write
     steps:
-      # The body is untrusted: it reaches the shell only through an environment variable and a file.
+      # The body is untrusted: it reaches the shell only through an environment variable
+      # and a file.
       - name: Write the issue body to a file
         env:
           BODY: ${{ github.event.issue.body }}

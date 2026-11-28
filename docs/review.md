@@ -1,8 +1,11 @@
 # review render / review post
 
 ```sh
-canned-schedules-companion review render [flags] schedules/night-shift.canned-schedule.md …
-canned-schedules-companion review post --forge github|gitlab --repo OWNER/REPO --merge-request N [flags] dir
+canned-schedules-companion review render [flags] \
+  schedules/night-shift.canned-schedule.md …
+
+canned-schedules-companion review post --forge github|gitlab --repo OWNER/REPO \
+  --merge-request N [flags] dir
 ```
 
 Reviews a merge request (a pull request on GitHub) that changes the catalog, for example one proposed from the

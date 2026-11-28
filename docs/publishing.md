@@ -40,7 +40,8 @@ include:
   - remote: https://raw.githubusercontent.com/iilei/canned-schedules-companion/refs/tags/v0.3.9/templates/publish.yml
     integrity: sha256-5g7OmCe293M5Ol8de0z5Efgc4D43gTnAbd21nDlAqF0=
     inputs:
-      post-fetch-script: scripts/upload-schedules.sh # a copy of publish/upload-artifactory.sh
+      # a copy of publish/upload-artifactory.sh
+      post-fetch-script: scripts/upload-schedules.sh
 ```
 
 with the CI/CD variables `ARTIFACTORY_URL`, `ARTIFACTORY_REPO` and `ARTIFACTORY_TOKEN` (masked).
@@ -81,7 +82,8 @@ jobs:
           ARTIFACTORY_REPO: schedules-local
           ARTIFACTORY_TOKEN: ${{ secrets.ARTIFACTORY_TOKEN }}
         with:
-          post-fetch-script: scripts/upload-schedules.sh # a copy of publish/upload-artifactory.sh
+          # a copy of publish/upload-artifactory.sh
+          post-fetch-script: scripts/upload-schedules.sh
 ```
 
 | Input               | Meaning                                                                                        | Default                                                |

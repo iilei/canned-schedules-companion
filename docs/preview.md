@@ -29,7 +29,8 @@ files go where your workflow puts them. Teams that host the canned-schedules pre
 the core repo's `mise run web:build`, served from their own GitHub Pages or intranet) can opt in:
 
 ```sh
-canned-schedules-companion preview render --fiddle-link-base-uri https://schedules.example.com/preflight/ request.md
+canned-schedules-companion preview render \
+  --fiddle-link-base-uri https://schedules.example.com/preflight/ request.md
 ```
 
 The comment then ends with "Try this schedule in the playground and see its week", a link to that page with the
@@ -59,7 +60,8 @@ line or input.
 ## preview post
 
 ```sh
-canned-schedules-companion preview post --forge github|gitlab --repo OWNER/REPO --issue N [flags] dir
+canned-schedules-companion preview post --forge github|gitlab --repo OWNER/REPO \
+  --issue N [flags] dir
 ```
 
 Posts `dir/comment.md` (written by `preview render`) to the issue, keeping **one comment per issue**: it lists the
@@ -111,5 +113,6 @@ files. Every changed note uploads the week again, and earlier uploads stay in th
 
 ```sh
 GITLAB_TOKEN=glpat-… canned-schedules-companion preview post --forge gitlab \
-  --repo group/catalog --issue 12 --api-url https://gitlab.example.com/api/v4 --dry-run canned-schedule-preview
+  --repo group/catalog --issue 12 --api-url https://gitlab.example.com/api/v4 \
+  --dry-run canned-schedule-preview
 ```
